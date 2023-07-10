@@ -1,11 +1,5 @@
 # Define the default target now so that it is always the first target
-BUILD_TARGETS = main quantize quantize-stats perplexity embedding vdot train-text-from-scratch simple
-
-ifdef LLAMA_BUILD_SERVER
-	BUILD_TARGETS += server
-	LLAMA_SERVER_VERBOSE ?= 1
-server: private CXXFLAGS += -DSERVER_VERBOSE=$(LLAMA_SERVER_VERBOSE)
-endif
+BUILD_TARGETS = main quantize quantize-stats perplexity embedding vdot train-text-from-scratch simple server libembdinput.so embd-input-test
 
 default: $(BUILD_TARGETS)
 
@@ -43,8 +37,11 @@ endif
 
 # keep standard at C11 and C++11
 # -Ofast tends to produce faster code, but may not be available for some compilers.
-#OPT = -Ofast
+ifdef LLAMA_FAST
+OPT = -Ofast
+else
 OPT = -O3
+endif
 CFLAGS   = -I.              $(OPT) -std=c11   -fPIC
 CXXFLAGS = -I. -I./examples $(OPT) -std=c++11 -fPIC
 LDFLAGS  =
@@ -56,6 +53,10 @@ ifdef LLAMA_DEBUG
 else
 	CFLAGS   += -DNDEBUG
 	CXXFLAGS += -DNDEBUG
+endif
+
+ifdef LLAMA_SERVER_VERBOSE
+	CXXFLAGS += -DSERVER_VERBOSE=$(LLAMA_SERVER_VERBOSE)
 endif
 
 # warnings
@@ -131,6 +132,10 @@ ifndef LLAMA_NO_K_QUANTS
 	CFLAGS   += -DGGML_USE_K_QUANTS
 	CXXFLAGS += -DGGML_USE_K_QUANTS
 	OBJS     += k_quants.o
+ifdef LLAMA_QKK_64
+	CFLAGS   += -DGGML_QKK_64
+	CXXFLAGS += -DGGML_QKK_64
+endif
 endif
 
 ifndef LLAMA_NO_ACCELERATE
@@ -158,17 +163,27 @@ ifdef LLAMA_CUBLAS
 	LDFLAGS   += -lcublas -lculibos -lcudart -lcublasLt -lpthread -ldl -lrt -L/usr/local/cuda/lib64 -L/opt/cuda/lib64 -L$(CUDA_PATH)/targets/x86_64-linux/lib
 	OBJS      += ggml-cuda.o
 	NVCC      = nvcc
-	NVCCFLAGS = --forward-unknown-to-host-compiler -arch=native
+	NVCCFLAGS = --forward-unknown-to-host-compiler
+ifdef CUDA_DOCKER_ARCH
+	NVCCFLAGS += -Wno-deprecated-gpu-targets -arch=$(CUDA_DOCKER_ARCH)
+else
+	NVCCFLAGS += -arch=native
+endif # CUDA_DOCKER_ARCH
+ifdef LLAMA_CUDA_FORCE_DMMV
+	NVCCFLAGS += -DGGML_CUDA_FORCE_DMMV
+endif # LLAMA_CUDA_FORCE_DMMV
 ifdef LLAMA_CUDA_DMMV_X
 	NVCCFLAGS += -DGGML_CUDA_DMMV_X=$(LLAMA_CUDA_DMMV_X)
 else
 	NVCCFLAGS += -DGGML_CUDA_DMMV_X=32
 endif # LLAMA_CUDA_DMMV_X
-ifdef LLAMA_CUDA_DMMV_Y
-	NVCCFLAGS += -DGGML_CUDA_DMMV_Y=$(LLAMA_CUDA_DMMV_Y)
+ifdef LLAMA_CUDA_MMV_Y
+	NVCCFLAGS += -DGGML_CUDA_MMV_Y=$(LLAMA_CUDA_MMV_Y)
+else ifdef LLAMA_CUDA_DMMV_Y
+	NVCCFLAGS += -DGGML_CUDA_MMV_Y=$(LLAMA_CUDA_DMMV_Y) # for backwards compatibility
 else
-	NVCCFLAGS += -DGGML_CUDA_DMMV_Y=1
-endif # LLAMA_CUDA_DMMV_Y
+	NVCCFLAGS += -DGGML_CUDA_MMV_Y=1
+endif # LLAMA_CUDA_MMV_Y
 ifdef LLAMA_CUDA_DMMV_F16
 	NVCCFLAGS += -DGGML_CUDA_DMMV_F16
 endif # LLAMA_CUDA_DMMV_F16
@@ -177,6 +192,7 @@ ifdef LLAMA_CUDA_KQUANTS_ITER
 else
 	NVCCFLAGS += -DK_QUANTS_PER_ITERATION=2
 endif
+
 ggml-cuda.o: ggml-cuda.cu ggml-cuda.h
 	$(NVCC) $(NVCCFLAGS) $(CXXFLAGS) -Wno-pedantic -c $< -o $@
 endif # LLAMA_CUBLAS
@@ -265,7 +281,7 @@ libllama.so: llama.o ggml.o $(OBJS)
 	$(CXX) $(CXXFLAGS) -shared -fPIC -o $@ $^ $(LDFLAGS)
 
 clean:
-	rm -vf *.o *.so main quantize quantize-stats perplexity embedding benchmark-matmult save-load-state server vdot train-text-from-scratch build-info.h
+	rm -vf *.o *.so main quantize quantize-stats perplexity embedding benchmark-matmult save-load-state server simple vdot train-text-from-scratch embd-input-test build-info.h
 
 #
 # Examples
@@ -297,6 +313,13 @@ save-load-state: examples/save-load-state/save-load-state.cpp build-info.h ggml.
 
 server: examples/server/server.cpp examples/server/httplib.h examples/server/json.hpp build-info.h ggml.o llama.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) -Iexamples/server $(filter-out %.h,$(filter-out %.hpp,$^)) -o $@ $(LDFLAGS)
+
+libembdinput.so: examples/embd-input/embd-input.h examples/embd-input/embd-input-lib.cpp build-info.h ggml.o llama.o common.o $(OBJS)
+	$(CXX) --shared $(CXXFLAGS) $(filter-out %.h,$(filter-out %.hpp,$^)) -o $@ $(LDFLAGS)
+
+
+embd-input-test: libembdinput.so examples/embd-input/embd-input-test.cpp build-info.h ggml.o llama.o common.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.so,$(filter-out %.h,$(filter-out %.hpp,$^))) -o $@ $(LDFLAGS) -L. -lembdinput
 
 train-text-from-scratch: examples/train-text-from-scratch/train-text-from-scratch.cpp    build-info.h ggml.o llama.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
