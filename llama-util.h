@@ -111,7 +111,7 @@ struct llama_file {
             throw std::runtime_error(format("read error: %s", strerror(errno)));
         }
         if (ret != 1) {
-            throw std::runtime_error(std::string("unexpectedly reached end of file"));
+            throw std::runtime_error(std::string(format("unexpectedly reached end of file; ret = %zu", ret)));
         }
     }
 
