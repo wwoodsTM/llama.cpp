@@ -4113,25 +4113,8 @@ bool llama_save_session_file(struct llama_context * ctx, const char * path_sessi
     file.write_u32((uint32_t) n_token_count);
     file.write_raw(tokens, sizeof(llama_token) * n_token_count);
 
-    // save the context state
-    {
-        // const size_t n_state_size_max = llama_get_state_size(ctx);
-
-        // fprintf(stderr, "%s: state size: %zu\n", __func__, n_state_size_max);
-
-        // std::vector<uint8_t> state_data(n_state_size_max);
-
-        // fprintf(stderr, "%s: allocated mem for state data\n", __func__);
-
-        // const size_t n_state_size_cur = llama_copy_state_data(ctx, state_data.data());
-
-        // fprintf(stderr, "%s: state size (actual): %zu\n", __func__, n_state_size_cur);
-
-        // file.write_raw(state_data.data(), n_state_size_cur);
-
-        // use streaming write instead of copying to a buffer
-        llama_write_state_data_to_file(ctx, &file);
-    }
+    // use streaming write instead of copying to a buffer
+    llama_write_state_data_to_file(ctx, &file);
 
     return true;
 }
