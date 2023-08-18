@@ -659,6 +659,7 @@ int main(int argc, char ** argv) {
         if (input_echo) {
             for (auto id : embd) {
                 printf("%s", llama_token_to_str(ctx, id));
+                printf("(%d)", id);
             }
             fflush(stdout);
         }
