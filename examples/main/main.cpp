@@ -54,6 +54,15 @@ void sigint_handler(int signo) {
 }
 #endif
 
+
+llama_token llama_token_unk() {
+    return 0;
+}
+
+llama_token llama_token_eot() {
+    return 32000;
+}
+
 int main(int argc, char ** argv) {
     gpt_params params;
 
@@ -705,7 +714,7 @@ int main(int argc, char ** argv) {
             }
 
             // deal with end of text token in interactive mode
-            if (last_n_tokens.back() == llama_token_eos()) {
+            if (last_n_tokens.back() == llama_token_eos() || last_n_tokens.back() == llama_token_eot() || last_n_tokens.back() == llama_token_unk()) {
                 if (params.interactive) {
                     if (params.antiprompt.size() != 0) {
                         // tokenize and inject first reverse prompt
