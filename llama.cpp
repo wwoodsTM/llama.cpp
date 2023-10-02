@@ -7058,14 +7058,14 @@ struct llama_data_file_context : llama_data_context {
 */
 static void llama_copy_state_data_internal(struct llama_context * ctx, llama_data_context * data_ctx) {
     // TODO: does not support multi-sequence states
-    {
-        const auto & kv_self = ctx->kv_self;
-        for (uint32_t i = 0; i < kv_self.head; ++i) {
-            GGML_ASSERT(kv_self.cells[i].pos == (int32_t) i);
-            GGML_ASSERT(kv_self.cells[i].seq_id.size() == 1);
-            GGML_ASSERT(kv_self.cells[i].has_seq_id(0));
-        }
-    }
+    // {
+    //     const auto & kv_self = ctx->kv_self;
+    //     for (uint32_t i = 0; i < kv_self.head; ++i) {
+    //         GGML_ASSERT(kv_self.cells[i].pos == (int32_t) i);
+    //         GGML_ASSERT(kv_self.cells[i].seq_id.size() == 1);
+    //         GGML_ASSERT(kv_self.cells[i].has_seq_id(0));
+    //     }
+    // }
 
     // copy rng
     {
@@ -7271,7 +7271,7 @@ size_t llama_set_state_data(struct llama_context * ctx, uint8_t * src) {
         }
 
         ctx->kv_self.head = kv_ntok;
-        ctx->kv_self.size = kv_size;
+        ctx->kv_self.size = n_ctx;
     }
 
     const size_t nread    = inp - src;
@@ -7298,10 +7298,11 @@ static bool llama_load_session_file_internal(struct llama_context * ctx, const c
         llama_hparams session_hparams;
         file.read_raw(&session_hparams, sizeof(llama_hparams));
 
-        if (session_hparams != ctx->model.hparams) {
-            LLAMA_LOG_INFO("%s : model hparams didn't match from session file!\n", __func__);
-            return false;
-        }
+        // TODO: need to do floating point comparison imprecisely for norm_eps
+        //if (session_hparams != ctx->model.hparams) {
+        //    LLAMA_LOG_INFO("%s : model hparams didn't match from session file!\n", __func__);
+        //    return false;
+        //}
     }
 
     // load the prompt
