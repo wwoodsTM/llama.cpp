@@ -8454,11 +8454,10 @@ static bool llama_load_session_file_internal(struct llama_context * ctx, const c
         llama_hparams session_hparams;
         file.read_raw(&session_hparams, sizeof(llama_hparams));
 
-        // TODO: need to do floating point comparison imprecisely for norm_eps
-        //if (session_hparams != ctx->model.hparams) {
-        //    LLAMA_LOG_INFO("%s : model hparams didn't match from session file!\n", __func__);
-        //    return false;
-        //}
+        if (session_hparams != ctx->model.hparams) {
+           LLAMA_LOG_INFO("%s : model hparams didn't match from session file!\n", __func__);
+           return false;
+        }
     }
 
     // load the prompt
