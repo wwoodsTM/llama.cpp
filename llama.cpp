@@ -8166,7 +8166,8 @@ int llama_token_to_piece(const struct llama_model * model, llama_token token, ch
                 buf[0] = llama_token_to_byte(model->vocab, token);
                 return 1;
             } else {
-                GGML_ASSERT(false);
+                // let's not crash the program on unknown tokens
+                //GGML_ASSERT(false);
             }
             break;
         }
@@ -8182,12 +8183,14 @@ int llama_token_to_piece(const struct llama_model * model, llama_token token, ch
             } else if (llama_is_control_token(model->vocab, token)) {
                 ;
             } else {
-                GGML_ASSERT(false);
+                // let's not crash the program on unknown tokens
+                //GGML_ASSERT(false);
             }
             break;
         }
         default:
-            GGML_ASSERT(false);
+            // let's not crash the program on unknown tokens
+            //GGML_ASSERT(false);
         }
     }
     return 0;
