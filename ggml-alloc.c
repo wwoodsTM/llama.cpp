@@ -317,8 +317,9 @@ struct ggml_allocr * ggml_allocr_new_from_buffer(struct ggml_backend_buffer * bu
         /*.parse_seq     = */ {0},
         /*.parse_seq_len = */ 0,
 #ifdef GGML_ALLOCATOR_DEBUG
-    (*alloc).allocated_tensors = {0};
+        /*.allocated_tensors = */ {0},
 #endif
+    };
 
     ggml_allocr_reset(alloc);
 
