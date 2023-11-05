@@ -137,6 +137,8 @@ int main(int argc, char ** argv) {
     printf("prompt: '%s'\n", params.prompt.c_str());
     printf("\n");
 
+    printf("OUTPUT START\n");
+
     for (int i = 0; i < max_tgt_len; i++) {
         const char * tmp = sample(ctx_llama, params, &n_past);
         if (strcmp(tmp, "</s>") == 0) break;
@@ -145,7 +147,7 @@ int main(int argc, char ** argv) {
         fflush(stdout);
     }
 
-    printf("\n");
+    printf("OUTPUT END\n");
 
     {
         const float t_img_enc_ms = (t_img_enc_end_us - t_img_enc_start_us) / 1000.0;
