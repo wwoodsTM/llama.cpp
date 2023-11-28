@@ -43,6 +43,7 @@ else()
 endif()
 
 # general
+option(BUILD_SHARED_LIBS                "build shared libraries"                                OFF)
 option(LLAMA_STATIC                     "llama: static link libraries"                          OFF)
 option(LLAMA_NATIVE                     "llama: enable -march=native flag"                      ON)
 option(LLAMA_LTO                        "llama: enable link time optimization"                  OFF)
@@ -99,6 +100,9 @@ option(LLAMA_QKK_64                          "llama: use super-block size of 64 
 option(LLAMA_BUILD_TESTS                "llama: build tests"    ${LLAMA_STANDALONE})
 option(LLAMA_BUILD_EXAMPLES             "llama: build examples" ${LLAMA_STANDALONE})
 option(LLAMA_BUILD_SERVER               "llama: build server example"                           ON)
+
+# Required for relocatable CMake package
+include(${CMAKE_CURRENT_SOURCE_DIR}/scripts/build-info.cmake)
 
 #
 # Compile flags
@@ -397,6 +401,15 @@ if (LLAMA_LTO)
     endif()
 endif()
 
+# this version of Apple ld64 is buggy
+execute_process(
+    COMMAND ${CMAKE_C_COMPILER} ${CMAKE_EXE_LINKER_FLAGS} -Wl,-v
+    ERROR_VARIABLE output
+)
+if (output MATCHES "dyld-1015\.7")
+    add_compile_definitions(HAVE_BUGGY_APPLE_LINKER)
+endif()
+
 # Architecture specific
 # TODO: probably these flags need to be tweaked on some architectures
 #       feel free to update the Makefile for your architecture and send a pull request or issue
@@ -504,8 +517,12 @@ elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^(x86_64|i686|AMD64)$" OR "${CMAKE_GE
     endif()
 elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "ppc64")
     message(STATUS "PowerPC detected")
-    add_compile_options(-mcpu=native -mtune=native)
-    #TODO: Add  targets for Power8/Power9 (Altivec/VSX) and Power10(MMA) and query for big endian systems (ppc64/le/be)
+    if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "ppc64le")
+        add_compile_options(-mcpu=powerpc64le)
+    else()
+        add_compile_options(-mcpu=native -mtune=native)
+        #TODO: Add  targets for Power8/Power9 (Altivec/VSX) and Power10(MMA) and query for big endian systems (ppc64/le/be)
+    endif()
 else()
     message(STATUS "Unknown architecture")
 endif()
