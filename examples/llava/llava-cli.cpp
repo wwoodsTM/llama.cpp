@@ -217,7 +217,7 @@ static void process_prompt(struct llava_context * ctx_llava, struct llava_image_
 
     // generate the response
 
-    printf("\n");
+    printf("OUTPUT START\n");
 
     for (int i = 0; i < max_tgt_len; i++) {
         const char * tmp = sample(ctx_llava->ctx_llama, *params, &n_past);
@@ -227,7 +227,7 @@ static void process_prompt(struct llava_context * ctx_llava, struct llava_image_
         fflush(stdout);
     }
 
-    printf("\n");
+    printf("OUTPUT END\n");
 }
 
 
