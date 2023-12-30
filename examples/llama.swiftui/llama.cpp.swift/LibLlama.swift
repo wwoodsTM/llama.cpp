@@ -1,5 +1,7 @@
 import Foundation
 
+// To use this in your own project, add llama.cpp as a swift package dependency
+// and uncomment this import line.
 // import llama
 
 enum LlamaError: Error {
@@ -203,7 +205,7 @@ actor LlamaContext {
         var pp_std: Double = 0
         var tg_std: Double = 0
 
-        for r in 0..<nr {
+        for _ in 0..<nr {
             // bench prompt processing
 
             llama_batch_clear(&batch)
