@@ -95,6 +95,7 @@ option(LLAMA_HIP_UMA                         "llama: use HIP unified memory arch
 option(LLAMA_CLBLAST                         "llama: use CLBlast"                               OFF)
 option(LLAMA_METAL                           "llama: use Metal"                                 ${LLAMA_METAL_DEFAULT})
 option(LLAMA_METAL_NDEBUG                    "llama: disable Metal debugging"                   OFF)
+option(LLAMA_METAL_SHADER_DEBUG              "llama: compile Metal with -fno-fast-math"         OFF)
 option(LLAMA_MPI                             "llama: use MPI"                                   OFF)
 option(LLAMA_QKK_64                          "llama: use super-block size of 64 for k-quants"   OFF)
 
@@ -145,8 +146,8 @@ if (APPLE AND LLAMA_ACCELERATE)
         message(STATUS "Accelerate framework found")
 
         add_compile_definitions(GGML_USE_ACCELERATE)
-        # add_compile_definitions(ACCELERATE_NEW_LAPACK)
-        # add_compile_definitions(ACCELERATE_LAPACK_ILP64)
+        add_compile_definitions(ACCELERATE_NEW_LAPACK)
+        add_compile_definitions(ACCELERATE_LAPACK_ILP64)
         set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} ${ACCELERATE_FRAMEWORK})
     else()
         message(WARNING "Accelerate framework not found")
@@ -154,9 +155,9 @@ if (APPLE AND LLAMA_ACCELERATE)
 endif()
 
 if (LLAMA_METAL)
-    find_library(FOUNDATION_LIBRARY         Foundation              REQUIRED)
-    find_library(METAL_FRAMEWORK            Metal                   REQUIRED)
-    find_library(METALKIT_FRAMEWORK         MetalKit                REQUIRED)
+    find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
+    find_library(METAL_FRAMEWORK    Metal      REQUIRED)
+    find_library(METALKIT_FRAMEWORK MetalKit   REQUIRED)
 
     message(STATUS "Metal framework found")
     set(GGML_HEADERS_METAL ggml-metal.h)
@@ -173,6 +174,35 @@ if (LLAMA_METAL)
     # copy ggml-metal.metal to bin directory
     configure_file(ggml-metal.metal ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ggml-metal.metal COPYONLY)
 
+    if (LLAMA_METAL_SHADER_DEBUG)
+        # custom command to do the following:
+        #   xcrun -sdk macosx metal    -fno-fast-math -c ggml-metal.metal -o ggml-metal.air
+        #   xcrun -sdk macosx metallib                   ggml-metal.air   -o default.metallib
+        #
+        # note: this is the only way I found to disable fast-math in Metal. it's ugly, but at least it works
+        #       disabling fast math is needed in order to pass tests/test-backend-ops
+        # note: adding -fno-inline fixes the tests when using MTL_SHADER_VALIDATION=1
+        # note: unfortunately, we have to call it default.metallib instead of ggml.metallib
+        #       ref: https://github.com/ggerganov/whisper.cpp/issues/1720
+        set(XC_FLAGS -fno-fast-math -fno-inline -g)
+        if (LLAMA_QKK_64)
+            set(XC_FLAGS ${XC_FLAGS} -DQK_K=64)
+        endif()
+
+        add_custom_command(
+            OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/default.metallib
+            COMMAND xcrun -sdk macosx metal    ${XC_FLAGS} -c ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ggml-metal.metal -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ggml-metal.air
+            COMMAND xcrun -sdk macosx metallib                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ggml-metal.air   -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/default.metallib
+            DEPENDS ggml-metal.metal
+            COMMENT "Compiling Metal kernels"
+        )
+
+        add_custom_target(
+            ggml-metal ALL
+            DEPENDS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/default.metallib
+        )
+    endif()
+
     set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS}
         ${FOUNDATION_LIBRARY}
         ${METAL_FRAMEWORK}
@@ -187,14 +217,75 @@ if (LLAMA_BLAS)
         set(BLA_SIZEOF_INTEGER 8)
     endif()
 
-    add_subdirectory(../OpenBLAS ${CMAKE_CURRENT_BINARY_DIR}/openblas)
-    set(BLAS_INCLUDE_DIRS ../OpenBLAS ${CMAKE_CURRENT_BINARY_DIR}/openblas)
+    set(BLA_VENDOR ${LLAMA_BLAS_VENDOR})
+    find_package(BLAS)
 
-    message(STATUS "BLAS found, Includes: ${BLAS_INCLUDE_DIRS}")
-    add_compile_options(${BLAS_LINKER_FLAGS})
-    add_compile_definitions(GGML_USE_OPENBLAS)
-    set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} openblas)
-    set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ${BLAS_INCLUDE_DIRS})
+    if (BLAS_FOUND)
+        message(STATUS "BLAS found, Libraries: ${BLAS_LIBRARIES}")
+
+        if ("${BLAS_INCLUDE_DIRS}" STREQUAL "")
+            # BLAS_INCLUDE_DIRS is missing in FindBLAS.cmake.
+            # see https://gitlab.kitware.com/cmake/cmake/-/issues/20268
+            find_package(PkgConfig REQUIRED)
+            if (${LLAMA_BLAS_VENDOR} MATCHES "Generic")
+                pkg_check_modules(DepBLAS REQUIRED blas)
+            elseif (${LLAMA_BLAS_VENDOR} MATCHES "OpenBLAS")
+                # As of openblas v0.3.22, the 64-bit is named openblas64.pc
+                pkg_check_modules(DepBLAS openblas64)
+                if (NOT DepBLAS_FOUND)
+                    pkg_check_modules(DepBLAS REQUIRED openblas)
+                endif()
+            elseif (${LLAMA_BLAS_VENDOR} MATCHES "FLAME")
+                pkg_check_modules(DepBLAS REQUIRED blis)
+            elseif (${LLAMA_BLAS_VENDOR} MATCHES "ATLAS")
+                pkg_check_modules(DepBLAS REQUIRED blas-atlas)
+            elseif (${LLAMA_BLAS_VENDOR} MATCHES "FlexiBLAS")
+                pkg_check_modules(DepBLAS REQUIRED flexiblas_api)
+            elseif (${LLAMA_BLAS_VENDOR} MATCHES "Intel")
+                # all Intel* libraries share the same include path
+                pkg_check_modules(DepBLAS REQUIRED mkl-sdl)
+            elseif (${LLAMA_BLAS_VENDOR} MATCHES "NVHPC")
+                # this doesn't provide pkg-config
+                # suggest to assign BLAS_INCLUDE_DIRS on your own
+                if ("${NVHPC_VERSION}" STREQUAL "")
+                    message(WARNING "Better to set NVHPC_VERSION")
+                else()
+                    set(DepBLAS_FOUND ON)
+                    set(DepBLAS_INCLUDE_DIRS "/opt/nvidia/hpc_sdk/${CMAKE_SYSTEM_NAME}_${CMAKE_SYSTEM_PROCESSOR}/${NVHPC_VERSION}/math_libs/include")
+                endif()
+            endif()
+            if (DepBLAS_FOUND)
+                set(BLAS_INCLUDE_DIRS ${DepBLAS_INCLUDE_DIRS})
+            else()
+                message(WARNING "BLAS_INCLUDE_DIRS neither been provided nor been automatically"
+                " detected by pkgconfig, trying to find cblas.h from possible paths...")
+                find_path(BLAS_INCLUDE_DIRS
+                    NAMES cblas.h
+                    HINTS
+                        /usr/include
+                        /usr/local/include
+                        /usr/include/openblas
+                        /opt/homebrew/opt/openblas/include
+                        /usr/local/opt/openblas/include
+                        /usr/include/x86_64-linux-gnu/openblas/include
+                )
+            endif()
+        endif()
+
+        message(STATUS "BLAS found, Includes: ${BLAS_INCLUDE_DIRS}")
+        add_compile_options(${BLAS_LINKER_FLAGS})
+        add_compile_definitions(GGML_USE_OPENBLAS)
+        if (${BLAS_INCLUDE_DIRS} MATCHES "mkl" AND (${LLAMA_BLAS_VENDOR} MATCHES "Generic" OR ${LLAMA_BLAS_VENDOR} MATCHES "Intel"))
+            add_compile_definitions(GGML_BLAS_USE_MKL)
+        endif()
+        set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} ${BLAS_LIBRARIES})
+        set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ${BLAS_INCLUDE_DIRS})
+
+    else()
+        message(WARNING "BLAS not found, please refer to "
+        "https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors"
+        " to set correct LLAMA_BLAS_VENDOR")
+    endif()
 endif()
 
 if (LLAMA_QKK_64)
@@ -291,15 +382,19 @@ if (LLAMA_MPI)
 endif()
 
 if (LLAMA_CLBLAST)
-    # build CLBlast from source
-    add_subdirectory(../CLBlast ${CMAKE_CURRENT_BINARY_DIR}/clblast)
+    find_package(CLBlast)
+    if (CLBlast_FOUND)
+        message(STATUS "CLBlast found")
 
         set(GGML_HEADERS_OPENCL ggml-opencl.h)
         set(GGML_SOURCES_OPENCL ggml-opencl.cpp)
 
-    add_compile_definitions(GGML_USE_CLBLAST)
+        add_compile_definitions(GGML_USE_CLBLAST)
 
-    set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} clblast)
+        set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} clblast)
+    else()
+        message(WARNING "CLBlast not found")
+    endif()
 endif()
 
 if (LLAMA_HIPBLAS)
