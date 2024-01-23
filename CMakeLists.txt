@@ -387,19 +387,21 @@ if (LLAMA_MPI)
 endif()
 
 if (LLAMA_CLBLAST)
-    find_package(CLBlast)
-    if (CLBlast_FOUND)
-        message(STATUS "CLBlast found")
+    # build CLBlast from source
+    # Add CLBlast directory
+    add_subdirectory(CLBlast)
 
-        set(GGML_HEADERS_OPENCL ggml-opencl.h)
-        set(GGML_SOURCES_OPENCL ggml-opencl.cpp)
+    # Include directories for CLBlast
+    include_directories(CLBlast/include)
 
-        add_compile_definitions(GGML_USE_CLBLAST)
+    message(STATUS "CLBlast source found")
 
-        set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} clblast)
-    else()
-        message(WARNING "CLBlast not found")
-    endif()
+    set(GGML_HEADERS_OPENCL ggml-opencl.h)
+    set(GGML_SOURCES_OPENCL ggml-opencl.cpp)
+
+    add_compile_definitions(GGML_USE_CLBLAST)
+
+    set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} clblast)
 endif()
 
 if (LLAMA_HIPBLAS)
