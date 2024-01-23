@@ -339,10 +339,10 @@ endif()
 if (LLAMA_CLBLAST)
     # build CLBlast from source
     # Add CLBlast directory
-    add_subdirectory(CLBlast)
+    add_subdirectory(../CLBlast ${CMAKE_CURRENT_BINARY_DIR}/clblast)
 
     # Include directories for CLBlast
-    include_directories(CLBlast/include)
+    include_directories(../CLBlast/include)
 
     message(STATUS "CLBlast source found")
 
