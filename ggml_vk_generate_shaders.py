@@ -645,26 +645,63 @@ void main() {
         if (is < 4) {
             sc = uint8_t(data_a[i].scales[is] & 63);
             m  = uint8_t(data_a[i].scales[is + 4] & 63);
+
+            const FLOAT_TYPE d1 = dall * sc;
+            const FLOAT_TYPE m1 = dmin * m;
+
+            if (is < 4) {
+                sc = uint8_t(data_a[i].scales[is + 1] & 63);
+                m  = uint8_t(data_a[i].scales[is + 5] & 63);
+
+                const FLOAT_TYPE d2 = dall * sc;
+                const FLOAT_TYPE m2 = dmin * m;
+
+                [[unroll]] for (int l = 0; l < n; ++l) {
+                    data_b[y_idx + l     ] = D_TYPE(d1 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] & 0xF) - m1);
+                    data_b[y_idx + l + 32] = D_TYPE(d2 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] >>  4) - m2);
+                }
+            } else {
+                sc = uint8_t((data_a[i].scales[is + 5] & 0xF) | ((data_a[i].scales[is - 3] >> 6) << 4));
+                m  = uint8_t((data_a[i].scales[is + 5] >>  4) | ((data_a[i].scales[is + 1] >> 6) << 4));
+
+                const FLOAT_TYPE d2 = dall * sc;
+                const FLOAT_TYPE m2 = dmin * m;
+
+                [[unroll]] for (int l = 0; l < n; ++l) {
+                    data_b[y_idx + l     ] = D_TYPE(d1 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] & 0xF) - m1);
+                    data_b[y_idx + l + 32] = D_TYPE(d2 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] >>  4) - m2);
+                }
+            }
         } else {
             sc = uint8_t((data_a[i].scales[is + 4] & 0xF) | ((data_a[i].scales[is - 4] >> 6) << 4));
             m  = uint8_t((data_a[i].scales[is + 4] >>  4) | ((data_a[i].scales[is    ] >> 6) << 4));
-        }
-        const FLOAT_TYPE d1 = dall * sc;
-        const FLOAT_TYPE m1 = dmin * m;
 
-        if (is < 4) {
-            sc = uint8_t(data_a[i].scales[is + 1] & 63);
-            m  = uint8_t(data_a[i].scales[is + 5] & 63);
-        } else {
-            sc = uint8_t((data_a[i].scales[is + 5] & 0xF) | ((data_a[i].scales[is - 3] >> 6) << 4));
-            m  = uint8_t((data_a[i].scales[is + 5] >>  4) | ((data_a[i].scales[is + 1] >> 6) << 4));
-        }
-        const FLOAT_TYPE d2 = dall * sc;
-        const FLOAT_TYPE m2 = dmin * m;
+            const FLOAT_TYPE d1 = dall * sc;
+            const FLOAT_TYPE m1 = dmin * m;
 
-        [[unroll]] for (int l = 0; l < n; ++l) {
-            data_b[y_idx + l     ] = D_TYPE(d1 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] & 0xF) - m1);
-            data_b[y_idx + l + 32] = D_TYPE(d2 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] >>  4) - m2);
+            if (is < 4) {
+                sc = uint8_t(data_a[i].scales[is + 1] & 63);
+                m  = uint8_t(data_a[i].scales[is + 5] & 63);
+
+                const FLOAT_TYPE d2 = dall * sc;
+                const FLOAT_TYPE m2 = dmin * m;
+
+                [[unroll]] for (int l = 0; l < n; ++l) {
+                    data_b[y_idx + l     ] = D_TYPE(d1 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] & 0xF) - m1);
+                    data_b[y_idx + l + 32] = D_TYPE(d2 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] >>  4) - m2);
+                }
+            } else {
+                sc = uint8_t((data_a[i].scales[is + 5] & 0xF) | ((data_a[i].scales[is - 3] >> 6) << 4));
+                m  = uint8_t((data_a[i].scales[is + 5] >>  4) | ((data_a[i].scales[is + 1] >> 6) << 4));
+
+                const FLOAT_TYPE d2 = dall * sc;
+                const FLOAT_TYPE m2 = dmin * m;
+
+                [[unroll]] for (int l = 0; l < n; ++l) {
+                    data_b[y_idx + l     ] = D_TYPE(d1 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] & 0xF) - m1);
+                    data_b[y_idx + l + 32] = D_TYPE(d2 * FLOAT_TYPE(data_a[i].qs[qs_idx + l] >>  4) - m2);
+                }
+            }
         }
     }
 }
@@ -707,29 +744,72 @@ void main() {
         if (is < 4) {
             sc = uint8_t(data_a[i].scales[is] & 63);
             m  = uint8_t(data_a[i].scales[is + 4] & 63);
+
+            const FLOAT_TYPE d1 = dall * sc;
+            const FLOAT_TYPE m1 = dmin * m;
+
+            if (is < 4) {
+                sc = uint8_t(data_a[i].scales[is + 1] & 63);
+                m  = uint8_t(data_a[i].scales[is + 5] & 63);
+
+                const FLOAT_TYPE d2 = dall * sc;
+                const FLOAT_TYPE m2 = dmin * m;
+
+                const uint8_t hm1 = uint8_t(1 << (2 * il    ));
+                const uint8_t hm2 = uint8_t(1 << (2 * il + 1));
+                data_b[y_idx     ] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx    ] & 0xF) + (((data_a[i].qh[qh_idx    ] & hm1) != 0) ? 16 : 0)) - m1);
+                data_b[y_idx +  1] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1] & 0xF) + (((data_a[i].qh[qh_idx + 1] & hm1) != 0) ? 16 : 0)) - m1);
+                data_b[y_idx + 32] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx    ]  >> 4) + (((data_a[i].qh[qh_idx    ] & hm2) != 0) ? 16 : 0)) - m2);
+                data_b[y_idx + 33] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1]  >> 4) + (((data_a[i].qh[qh_idx + 1] & hm2) != 0) ? 16 : 0)) - m2);
+            } else {
+                sc = uint8_t((data_a[i].scales[is + 5] & 0xF) | ((data_a[i].scales[is - 3] >> 6) << 4));
+                m  = uint8_t((data_a[i].scales[is + 5] >>  4) | ((data_a[i].scales[is + 1] >> 6) << 4));
+
+                const FLOAT_TYPE d2 = dall * sc;
+                const FLOAT_TYPE m2 = dmin * m;
+
+                const uint8_t hm1 = uint8_t(1 << (2 * il    ));
+                const uint8_t hm2 = uint8_t(1 << (2 * il + 1));
+                data_b[y_idx     ] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx    ] & 0xF) + (((data_a[i].qh[qh_idx    ] & hm1) != 0) ? 16 : 0)) - m1);
+                data_b[y_idx +  1] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1] & 0xF) + (((data_a[i].qh[qh_idx + 1] & hm1) != 0) ? 16 : 0)) - m1);
+                data_b[y_idx + 32] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx    ]  >> 4) + (((data_a[i].qh[qh_idx    ] & hm2) != 0) ? 16 : 0)) - m2);
+                data_b[y_idx + 33] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1]  >> 4) + (((data_a[i].qh[qh_idx + 1] & hm2) != 0) ? 16 : 0)) - m2);
+            }
         } else {
             sc = uint8_t((data_a[i].scales[is + 4] & 0xF) | ((data_a[i].scales[is - 4] >> 6) << 4));
             m  = uint8_t((data_a[i].scales[is + 4] >>  4) | ((data_a[i].scales[is    ] >> 6) << 4));
-        }
-        const FLOAT_TYPE d1 = dall * sc;
-        const FLOAT_TYPE m1 = dmin * m;
 
-        if (is < 4) {
-            sc = uint8_t(data_a[i].scales[is + 1] & 63);
-            m  = uint8_t(data_a[i].scales[is + 5] & 63);
-        } else {
-            sc = uint8_t((data_a[i].scales[is + 5] & 0xF) | ((data_a[i].scales[is - 3] >> 6) << 4));
-            m  = uint8_t((data_a[i].scales[is + 5] >>  4) | ((data_a[i].scales[is + 1] >> 6) << 4));
-        }
-        const FLOAT_TYPE d2 = dall * sc;
-        const FLOAT_TYPE m2 = dmin * m;
+            const FLOAT_TYPE d1 = dall * sc;
+            const FLOAT_TYPE m1 = dmin * m;
 
-        const uint8_t hm1 = uint8_t(1 << (2 * il    ));
-        const uint8_t hm2 = uint8_t(1 << (2 * il + 1));
-        data_b[y_idx     ] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx    ] & 0xF) + (((data_a[i].qh[qh_idx    ] & hm1) != 0) ? 16 : 0)) - m1);
-        data_b[y_idx +  1] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1] & 0xF) + (((data_a[i].qh[qh_idx + 1] & hm1) != 0) ? 16 : 0)) - m1);
-        data_b[y_idx + 32] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx    ]  >> 4) + (((data_a[i].qh[qh_idx    ] & hm2) != 0) ? 16 : 0)) - m2);
-        data_b[y_idx + 33] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1]  >> 4) + (((data_a[i].qh[qh_idx + 1] & hm2) != 0) ? 16 : 0)) - m2);
+            if (is < 4) {
+                sc = uint8_t(data_a[i].scales[is + 1] & 63);
+                m  = uint8_t(data_a[i].scales[is + 5] & 63);
+
+                const FLOAT_TYPE d2 = dall * sc;
+                const FLOAT_TYPE m2 = dmin * m;
+
+                const uint8_t hm1 = uint8_t(1 << (2 * il    ));
+                const uint8_t hm2 = uint8_t(1 << (2 * il + 1));
+                data_b[y_idx     ] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx    ] & 0xF) + (((data_a[i].qh[qh_idx    ] & hm1) != 0) ? 16 : 0)) - m1);
+                data_b[y_idx +  1] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1] & 0xF) + (((data_a[i].qh[qh_idx + 1] & hm1) != 0) ? 16 : 0)) - m1);
+                data_b[y_idx + 32] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx    ]  >> 4) + (((data_a[i].qh[qh_idx    ] & hm2) != 0) ? 16 : 0)) - m2);
+                data_b[y_idx + 33] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1]  >> 4) + (((data_a[i].qh[qh_idx + 1] & hm2) != 0) ? 16 : 0)) - m2);
+            } else {
+                sc = uint8_t((data_a[i].scales[is + 5] & 0xF) | ((data_a[i].scales[is - 3] >> 6) << 4));
+                m  = uint8_t((data_a[i].scales[is + 5] >>  4) | ((data_a[i].scales[is + 1] >> 6) << 4));
+
+                const FLOAT_TYPE d2 = dall * sc;
+                const FLOAT_TYPE m2 = dmin * m;
+
+                const uint8_t hm1 = uint8_t(1 << (2 * il    ));
+                const uint8_t hm2 = uint8_t(1 << (2 * il + 1));
+                data_b[y_idx     ] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx    ] & 0xF) + (((data_a[i].qh[qh_idx    ] & hm1) != 0) ? 16 : 0)) - m1);
+                data_b[y_idx +  1] = D_TYPE(d1 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1] & 0xF) + (((data_a[i].qh[qh_idx + 1] & hm1) != 0) ? 16 : 0)) - m1);
+                data_b[y_idx + 32] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx    ]  >> 4) + (((data_a[i].qh[qh_idx    ] & hm2) != 0) ? 16 : 0)) - m2);
+                data_b[y_idx + 33] = D_TYPE(d2 * FLOAT_TYPE((data_a[i].qs[qs_idx + 1]  >> 4) + (((data_a[i].qh[qh_idx + 1] & hm2) != 0) ? 16 : 0)) - m2);
+            }
+        }
     }
 }
 """
