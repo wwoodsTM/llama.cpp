@@ -13,6 +13,7 @@ struct llama_sampling_context * llama_sampling_init(const struct llama_sampling_
         // will be empty (default) if there are parse errors
         if (result->parsed_grammar.rules.empty()) {
             fprintf(stderr, "%s: failed to parse grammar\n", __func__);
+            delete result;
             return nullptr;
         }
 
@@ -134,6 +135,7 @@ static void sampler_queue(
 
     const float         temp              = params.temp;
     const float         dynatemp_range    = params.dynatemp_range;
+    const float         dynatemp_exponent = params.dynatemp_exponent;
     const int32_t       top_k             = params.top_k <= 0 ? n_vocab : params.top_k;
     const float         top_p             = params.top_p;
     const float         min_p             = params.min_p;
@@ -148,23 +150,14 @@ static void sampler_queue(
             case 'y': llama_sample_typical  (ctx_main, &cur_p, typical_p, min_keep); break;
             case 'p': llama_sample_top_p    (ctx_main, &cur_p, top_p,     min_keep); break;
             case 'm': llama_sample_min_p    (ctx_main, &cur_p, min_p,     min_keep); break;
-
             case 't':
-                if (dynatemp_range>0)
-                {
-                    float dynatemp_min = temp - dynatemp_range;
-                    float dynatemp_max = temp + dynatemp_range;
-                    //do not allow negative values
-                    dynatemp_min = dynatemp_min<0?0:dynatemp_min;
-                    dynatemp_max = dynatemp_max<0?0:dynatemp_max;
-
-                    llama_sample_entropy(ctx_main, &cur_p, temp, dynatemp_min, dynatemp_max);
-                }
-                else
-                {
+                if (dynatemp_range > 0) {
+                    float dynatemp_min = std::max(0.0f, temp - dynatemp_range);
+                    float dynatemp_max = std::max(0.0f, temp + dynatemp_range);
+                    llama_sample_entropy(ctx_main, &cur_p, dynatemp_min, dynatemp_max, dynatemp_exponent);
+                } else {
                     llama_sample_temp(ctx_main, &cur_p, temp);
                 }
-                
                 break;
             default : break;
         }
