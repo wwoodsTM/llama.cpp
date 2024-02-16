@@ -382,13 +382,13 @@ if (LLAMA_VULKAN)
         # add_library(ggml-vulkan STATIC ggml-vulkan.cpp ggml-vulkan.h)
         # target_link_libraries(ggml-vulkan PRIVATE vulkan)
 
-        # target_include_directories(ggml-vulkan PRIVATE ${VULKAN_PATH}/include)
-
         add_library(ggml-vulkan OBJECT ggml-vulkan.cpp ggml-vulkan.h)
         if (BUILD_SHARED_LIBS)
             set_target_properties(ggml-vulkan PROPERTIES POSITION_INDEPENDENT_CODE ON)
         endif()
         target_link_libraries(ggml-vulkan PRIVATE Vulkan::Vulkan)
+
+        target_include_directories(ggml-vulkan PRIVATE ${VULKAN_PATH}/include)
 
         add_compile_definitions(GGML_USE_VULKAN)
 
