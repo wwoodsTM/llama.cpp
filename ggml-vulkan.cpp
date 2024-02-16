@@ -1221,7 +1221,10 @@ void ggml_vk_init(ggml_backend_vk_context * ctx, size_t idx) {
 
     // Try to find a non-graphics compute queue and transfer-focused queues
     const uint32_t compute_queue_family_index = ggml_vk_find_queue_family_index(queue_family_props, vk::QueueFlagBits::eCompute, vk::QueueFlagBits::eGraphics, -1, 1);
+
+    // we need to use compute queue as the transfer queue
     const uint32_t transfer_queue_family_index = ggml_vk_find_queue_family_index(queue_family_props, vk::QueueFlagBits::eTransfer | vk::QueueFlagBits::eCompute, vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eGraphics, compute_queue_family_index, 1);
+    //const uint32_t transfer_queue_family_index = ggml_vk_find_queue_family_index(queue_family_props, vk::QueueFlagBits::eTransfer, vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eGraphics, compute_queue_family_index, 1);
 
     const float priorities[] = { 1.0f, 1.0f };
     ctx->device.lock()->single_queue = compute_queue_family_index == transfer_queue_family_index && queue_family_props[compute_queue_family_index].queueCount == 1;
@@ -5363,7 +5366,9 @@ static void ggml_vk_print_tensor(ggml_backend_vk_context * ctx, const ggml_tenso
 
         ggml_tensor_extra_gpu * extra = (ggml_tensor_extra_gpu *) tensor->extra;
 
-        ggml_vk_buffer_read(ctx, extra->buffer_gpu, extra->offset, tensor_data, tensor_size);
+        auto extra_gpu_ref = extra->buffer_gpu.lock();
+
+        ggml_vk_buffer_read(ctx, extra_gpu_ref, extra->offset, tensor_data, tensor_size);
     }
 
     std::cerr << "TENSOR CHECK " << name << " (" << tensor->name << "): " << ggml_op_name(tensor->op) << std::endl;
@@ -5471,11 +5476,13 @@ static void ggml_vk_check_results_0(ggml_backend_vk_context * ctx, ggml_compute_
         } else if (src0->backend == GGML_BACKEND_GPU) {
             ggml_tensor_extra_gpu * extra = (ggml_tensor_extra_gpu *) src0->extra;
             uint64_t offset = extra->offset;
+            auto extra_gpu_ref = extra->buffer_gpu.lock();
+
             if (!ggml_is_contiguous(src0) && ggml_vk_dim01_contiguous(src0)) {
                 for (int i3 = 0; i3 < src0->ne[3]; i3++) {
                     for (int i2 = 0; i2 < src0->ne[2]; i2++) {
                         const int idx = i3*src0->ne[2] + i2;
-                        ggml_vk_buffer_read(ctx, extra->buffer_gpu, offset + idx * src0->nb[2], ((char *)src0_clone->data + idx * src0_clone->nb[2]), src0->ne[1] * src0->nb[1]);
+                        ggml_vk_buffer_read(ctx, extra_gpu_ref, offset + idx * src0->nb[2], ((char *)src0_clone->data + idx * src0_clone->nb[2]), src0->ne[1] * src0->nb[1]);
                     }
                 }
 
@@ -5485,10 +5492,10 @@ static void ggml_vk_check_results_0(ggml_backend_vk_context * ctx, ggml_compute_
                     src0_clone->nb[i] = src0_clone->nb[i - 1]*src0_clone->ne[i - 1];
                 }
             } else {
-                if (offset + src0_size >= extra->buffer_gpu->size) {
-                    src0_size = extra->buffer_gpu->size - offset;
+                if (offset + src0_size >= extra_gpu_ref->size) {
+                    src0_size = extra_gpu_ref->size - offset;
                 }
-                ggml_vk_buffer_read(ctx, extra->buffer_gpu, offset, src0_clone->data, src0_size);
+                ggml_vk_buffer_read(ctx, extra_gpu_ref, offset, src0_clone->data, src0_size);
                 memcpy(src0_clone->nb, src0->nb, sizeof(size_t) * GGML_MAX_DIMS);
             }
         } else {
@@ -5513,12 +5520,14 @@ static void ggml_vk_check_results_0(ggml_backend_vk_context * ctx, ggml_compute_
             memcpy(src1_clone->nb, src1->nb, sizeof(size_t) * GGML_MAX_DIMS);
         } else if (src1->backend == GGML_BACKEND_GPU) {
             ggml_tensor_extra_gpu * extra = (ggml_tensor_extra_gpu *) src1->extra;
+            auto extra_buffer_gpu_ref = extra->buffer_gpu.lock();
             uint64_t offset = extra->offset;
+
             if (!ggml_is_contiguous(src1) && ggml_vk_dim01_contiguous(src1)) {
                 for (int i3 = 0; i3 < src1->ne[3]; i3++) {
                     for (int i2 = 0; i2 < src1->ne[2]; i2++) {
                         const int idx = i3*src1->ne[2] + i2;
-                        ggml_vk_buffer_read(ctx, extra->buffer_gpu, offset + idx * src1->nb[2], ((char *)src1_clone->data + idx * src1_clone->nb[2]), src1->ne[1] * src1->nb[1]);
+                        ggml_vk_buffer_read(ctx, extra_buffer_gpu_ref, offset + idx * src1->nb[2], ((char *)src1_clone->data + idx * src1_clone->nb[2]), src1->ne[1] * src1->nb[1]);
                     }
                 }
 
@@ -5528,10 +5537,10 @@ static void ggml_vk_check_results_0(ggml_backend_vk_context * ctx, ggml_compute_
                     src1_clone->nb[i] = src1_clone->nb[i - 1]*src1_clone->ne[i - 1];
                 }
             } else {
-                if (offset + src1_size >= extra->buffer_gpu->size) {
-                    src1_size = extra->buffer_gpu->size - offset;
+                if (offset + src1_size >= extra_buffer_gpu_ref->size) {
+                    src1_size = extra_buffer_gpu_ref->size - offset;
                 }
-                ggml_vk_buffer_read(ctx, extra->buffer_gpu, offset, src1_clone->data, src1_size);
+                ggml_vk_buffer_read(ctx, extra_buffer_gpu_ref, offset, src1_clone->data, src1_size);
                 memcpy(src1_clone->nb, src1->nb, sizeof(size_t) * GGML_MAX_DIMS);
             }
         } else {
@@ -5687,12 +5696,13 @@ static void ggml_vk_check_results_1(ggml_backend_vk_context * ctx, ggml_compute_
         tensor_data = malloc(tensor_size);
 
         ggml_tensor_extra_gpu * extra = (ggml_tensor_extra_gpu *) tensor->extra;
+        auto extra_buffer_gpu_ref = extra->buffer_gpu.lock();
 
-        if (extra->offset + tensor_size >= extra->buffer_gpu->size) {
-            tensor_size = extra->buffer_gpu->size - (extra->offset);
+        if (extra->offset + tensor_size >= extra_buffer_gpu_ref->size) {
+            tensor_size = extra_buffer_gpu_ref->size - (extra->offset);
         }
 
-        ggml_vk_buffer_read(ctx, extra->buffer_gpu, extra->offset, tensor_data, tensor_size);
+        ggml_vk_buffer_read(ctx, extra_buffer_gpu_ref, extra->offset, tensor_data, tensor_size);
     }
 
     float first_error_result = -1.0f;
