@@ -1240,7 +1240,7 @@ static void ggml_vk_init(ggml_backend_vk_context * ctx, size_t idx) {
     const uint32_t compute_queue_family_index = ggml_vk_find_queue_family_index(queue_family_props, vk::QueueFlagBits::eCompute, vk::QueueFlagBits::eGraphics, -1, 1);
 
     // we need to use compute queue as the transfer queue
-    const uint32_t transfer_queue_family_index = ggml_vk_find_queue_family_index(queue_family_props, vk::QueueFlagBits::eTransfer | vk::QueueFlagBits::eCompute, vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eGraphics, compute_queue_family_index, 1);
+    const uint32_t transfer_queue_family_index = ggml_vk_find_queue_family_index(queue_family_props, vk::QueueFlagBits::eTransfer | vk::QueueFlagBits::eGraphics, vk::QueueFlagBits::eCompute, compute_queue_family_index, 1);
     //const uint32_t transfer_queue_family_index = ggml_vk_find_queue_family_index(queue_family_props, vk::QueueFlagBits::eTransfer, vk::QueueFlagBits::eCompute | vk::QueueFlagBits::eGraphics, compute_queue_family_index, 1);
 
     const float priorities[] = { 1.0f, 1.0f };
@@ -5641,7 +5641,7 @@ static void ggml_vk_check_results_0(ggml_backend_vk_context * ctx, ggml_compute_
         tensor_clone = ggml_rms_norm(ggml_ctx, src0_clone, *(float *)tensor->op_params);
     } else if (tensor->op == GGML_OP_SOFT_MAX) {
         if (src1 != nullptr) {
-            tensor_clone = ggml_soft_max_ext(ggml_ctx, src0_clone, src1_clone, *(float *)tensor->op_params);
+            tensor_clone = ggml_soft_max_ext(ggml_ctx, src0_clone, src1_clone, NULL, *(float *)tensor->op_params, 0.0f);
         } else {
             tensor_clone = ggml_soft_max(ggml_ctx, src0_clone);
         }

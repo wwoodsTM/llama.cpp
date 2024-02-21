@@ -482,6 +482,7 @@ if (LLAMA_VULKAN)
         endif()
 
         set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} Vulkan::Vulkan)
+        set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ${VULKAN_PATH}/include)
     else()
         message(WARNING "Vulkan not found")
     endif()
