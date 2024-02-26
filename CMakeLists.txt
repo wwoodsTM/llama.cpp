@@ -438,21 +438,24 @@ if (LLAMA_MPI)
 endif()
 
 if (LLAMA_CLBLAST)
-    # build CLBlast from source
-    # Add CLBlast directory
-    add_subdirectory(../CLBlast ${CMAKE_CURRENT_BINARY_DIR}/clblast)
-
-    # Include directories for CLBlast
-    include_directories(../CLBlast/include)
-
-    message(STATUS "CLBlast source found")
+    message(STATUS "Building with CLBlast")
 
     set(GGML_HEADERS_OPENCL ggml-opencl.h)
     set(GGML_SOURCES_OPENCL ggml-opencl.cpp)
 
     add_compile_definitions(GGML_USE_CLBLAST)
 
-    set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} clblast)
+    # link our libOpenCL.so (this is only used during compile time)
+    add_library(OpenCL SHARED IMPORTED)
+    set_target_properties(OpenCL PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/../OpenCL/lib/libOpenCL.so)
+
+    # add our prebuilt clblast library
+    add_library(clblast SHARED IMPORTED)
+    set_target_properties(clblast PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/../../android/app/src/main/jniLibs/${ANDROID_ABI}/libclblast.so)
+
+    set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} clblast OpenCL)
+    set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ../CLBlast/include)
+    set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ../OpenCL/include)
 endif()
 
 if (LLAMA_VULKAN)
