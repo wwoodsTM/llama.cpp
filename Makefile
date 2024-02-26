@@ -173,7 +173,7 @@ ifdef LLAMA_DEBUG
 	MK_LDFLAGS  += -g
 
 	ifeq ($(UNAME_S),Linux)
-		MK_CXXFLAGS += -Wp,-D_GLIBCXX_ASSERTIONS
+		MK_CPPFLAGS += -D_GLIBCXX_ASSERTIONS
 	endif
 else
 	MK_CPPFLAGS += -DNDEBUG
@@ -597,7 +597,7 @@ $(info I CC:        $(shell $(CC)   --version | head -n 1))
 $(info I CXX:       $(shell $(CXX)  --version | head -n 1))
 ifdef LLAMA_CUBLAS
 $(info I NVCC:      $(shell $(NVCC) --version | tail -n 1))
-CUDA_VERSION := $(shell nvcc --version | grep -oP 'release (\K[0-9]+\.[0-9])')
+CUDA_VERSION := $(shell $(NVCC) --version | grep -oP 'release (\K[0-9]+\.[0-9])')
 ifeq ($(shell awk -v "v=$(CUDA_VERSION)" 'BEGIN { print (v < 11.7) }'),1)
 ifndef CUDA_DOCKER_ARCH
 ifndef CUDA_POWER_ARCH
@@ -719,7 +719,7 @@ save-load-state: examples/save-load-state/save-load-state.cpp ggml.o llama.o $(C
 	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h $<,$^) $(call GET_OBJ_FILE, $<) -o $@ $(LDFLAGS)
 
-server: examples/server/server.cpp examples/server/oai.hpp examples/server/utils.hpp examples/server/httplib.h examples/server/json.hpp examples/server/index.html.hpp examples/server/index.js.hpp examples/server/completion.js.hpp examples/llava/clip.cpp examples/llava/clip.h common/stb_image.h ggml.o llama.o $(COMMON_DEPS) grammar-parser.o $(OBJS)
+server: examples/server/server.cpp examples/server/oai.hpp examples/server/utils.hpp examples/server/httplib.h examples/server/json.hpp examples/server/index.html.hpp examples/server/index.js.hpp examples/server/completion.js.hpp examples/llava/clip.cpp examples/llava/clip.h examples/llava/llava.h examples/llava/llava.cpp common/stb_image.h ggml.o llama.o $(COMMON_DEPS) grammar-parser.o $(OBJS)
 	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
 	$(CXX) $(CXXFLAGS) -c examples/llava/clip.cpp -o $(call GET_OBJ_FILE, examples/llava/clip.cpp) -Wno-cast-qual
 	$(CXX) $(CXXFLAGS) -Iexamples/server $(filter-out %.h %.hpp $< examples/llava/clip.cpp,$^) $(call GET_OBJ_FILE, $<) $(call GET_OBJ_FILE, examples/llava/clip.cpp) -o $@ $(LDFLAGS) $(LWINSOCK2)
