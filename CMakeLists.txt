@@ -289,7 +289,7 @@ if (LLAMA_BLAS)
 
     add_subdirectory(../OpenBLAS ${CMAKE_CURRENT_BINARY_DIR}/OpenBLAS)
 
-    set(LLAMA_EXTRA_LIBS     ${LLAMA_EXTRA_LIBS}     openblas_static)
+    set(LLAMA_EXTRA_LIBS     ${LLAMA_EXTRA_LIBS}     openblas_shared)
     set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ../OpenBLAS ${CMAKE_CURRENT_BINARY_DIR}/OpenBLAS)
 endif()
 
