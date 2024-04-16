@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "common.h"
 #include "json.hpp"
 #include "json-schema-to-grammar.h"
