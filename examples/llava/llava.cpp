@@ -1,9 +1,9 @@
 #include "pch.h"
 #include "clip.h"
-#include "common.h"
+#include "common/common.h"
 #include "llama.h"
 #include "llava.h"
-#include "base64.hpp"
+#include "common/base64.hpp"
 
 #include <cstdio>
 #include <cstdlib>

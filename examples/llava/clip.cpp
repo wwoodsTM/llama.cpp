@@ -17,7 +17,7 @@
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "common/stb_image.h"
 
 #include <cassert>
 #include <cmath>
