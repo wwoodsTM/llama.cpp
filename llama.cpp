@@ -13067,9 +13067,8 @@ void llama_sample_dry(llama_token_data_array * candidates, const llama_token * l
                     // if we have reached the start of our stored prev, break
                     if(j - match_length > 0) break;
 
-                    // this shouldn't happen because (j - match_length) should always be smaller than (size - match_length)
-                    // but let's check here to avoid the unexpected
-                    if(last_tokens_size - match_length < 0) break;
+                    // (last_tokens_size - match_length) is unsigned so will always be greater or equal to 0
+                    // so no need to check for index out of bound here
 
                     // compare token starts at our prev index, going backwards by match length
                     auto compare_token = last_tokens[j - match_length];
