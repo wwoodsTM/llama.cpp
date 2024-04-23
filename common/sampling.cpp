@@ -315,7 +315,7 @@ static llama_token_data_array llama_sampling_prepare_impl(
                             penalty_tokens_used_size, dry_base, dry_multiplier, dry_allowed_length,
                             params.dry_sequence_breakers.data(), params.dry_sequence_breakers.size());
         }
-        
+
 
         if (!penalize_nl) {
             for (size_t idx = 0; idx < cur_p.size; idx++) {
