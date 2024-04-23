@@ -924,7 +924,6 @@ extern "C" {
 
     ///  @details DRY sampler as described in: https://github.com/oobabooga/text-generation-webui/pull/5677
     LLAMA_API void llama_sample_dry(
-            struct llama_context * ctx,
           llama_token_data_array * candidates,
                const llama_token * last_tokens,
                           size_t   last_tokens_size,

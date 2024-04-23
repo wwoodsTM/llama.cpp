@@ -310,7 +310,7 @@ static llama_token_data_array llama_sampling_prepare_impl(
 
         // DRY penalties (multiplier > 0 means enabled)
         if(dry_multiplier > 0.0f) {
-            llama_sample_dry(ctx_main, &cur_p,
+            llama_sample_dry(&cur_p,
                             penalty_tokens.data() + penalty_tokens.size() - penalty_tokens_used_size,
                             penalty_tokens_used_size, dry_base, dry_multiplier, dry_allowed_length,
                             params.dry_sequence_breakers.data(), params.dry_sequence_breakers.size());
