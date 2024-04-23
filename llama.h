@@ -927,12 +927,12 @@ extern "C" {
             struct llama_context * ctx,
           llama_token_data_array * candidates,
                const llama_token * last_tokens,
-                             int   last_token_size,
+                          size_t   last_tokens_size,
                            float   dry_base,
                            float   dry_multiplier,
                              int   dry_allowed_length,
                const llama_token * seq_breakers,
-                             int   seq_breakers_size);
+                          size_t   seq_breakers_size);
 
     /// @details Tail Free Sampling described in https://www.trentonbricken.com/Tail-Free-Sampling/.
     LLAMA_API void llama_sample_tail_free(

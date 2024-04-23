@@ -13044,7 +13044,7 @@ void llama_sample_min_p(struct llama_context * ctx, llama_token_data_array * can
     }
 }
 
-void llama_sample_dry(struct llama_context * ctx, llama_token_data_array * candidates, const llama_token * last_tokens, int last_token_size, float dry_base, float dry_multiplier, int dry_allowed_length, const llama_token * seq_breakers, int seq_breakers_size) {
+void llama_sample_dry(struct llama_context * ctx, llama_token_data_array * candidates, const llama_token * last_tokens, size_t last_tokens_size, float dry_base, float dry_multiplier, int dry_allowed_length, const llama_token * seq_breakers, size_t seq_breakers_size) {
     // loop through each candidate
     for (size_t i = 0; i < candidates->size; ++i) {
 
@@ -13056,7 +13056,7 @@ void llama_sample_dry(struct llama_context * ctx, llama_token_data_array * candi
         int max_match_length = 0;
 
         // loop through each previous token
-        for (size_t j = 0; j < last_token_size; ++j) {
+        for (size_t j = 0; j < last_tokens_size; ++j) {
             // if the current candidate is the same as the previous token
             if (candidates->data[i].id == last_tokens[j]) {
                 // greedily match sequence backwards starting from the current position with the end of prev
@@ -13069,13 +13069,13 @@ void llama_sample_dry(struct llama_context * ctx, llama_token_data_array * candi
 
                     // this shouldn't happen because (j - match_length) should always be smaller than (size - match_length)
                     // but let's check here to avoid the unexpected
-                    if(last_token_size - match_length < 0) break;
+                    if(last_tokens_size - match_length < 0) break;
 
                     // compare token starts at our prev index, going backwards by match length
                     auto compare_token = last_tokens[j - match_length];
 
                     // head token starts at the end of prev, going backwards by match length
-                    auto head_token = last_tokens[last_token_size - match_length];
+                    auto head_token = last_tokens[last_tokens_size - match_length];
 
                     // if compare token is part of the sequence breakers, break out of the match
                     if(std::find(seq_breakers, seq_breakers + seq_breakers_size, compare_token) != seq_breakers + seq_breakers_size)
