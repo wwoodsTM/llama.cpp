@@ -923,7 +923,7 @@ extern "C" {
             struct llama_context * ctx,
           llama_token_data_array * candidates,
                const llama_token * last_tokens,
-                             int   last_token_size,
+                             int   last_tokens_size,
                            float   dry_base,
                            float   dry_multiplier,
                              int   dry_allowed_length,
