@@ -13051,6 +13051,11 @@ void llama_sample_dry(llama_token_data_array * candidates, const llama_token * l
     // get the last token
     auto last_token = last_tokens[last_tokens_size - 1];
 
+    // if last token is part of the sequence breakers, skip whole sampler
+    if(std::find(seq_breakers, seq_breakers + seq_breakers_size, last_token) != seq_breakers + seq_breakers_size) {
+        return;
+    }
+
     // create an unordered map of "next tokens" <-> max match length
     std::unordered_map<llama_token, size_t> match_lengths;
 
