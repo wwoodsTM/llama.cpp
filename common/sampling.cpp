@@ -103,10 +103,10 @@ std::string llama_sampling_print(const llama_sampling_params & params) {
     snprintf(result, sizeof(result),
             "\trepeat_last_n = %d, repeat_penalty = %.3f, frequency_penalty = %.3f, presence_penalty = %.3f\n"
             "\ttop_k = %d, tfs_z = %.3f, top_p = %.3f, min_p = %.3f, typical_p = %.3f, temp = %.3f\n"
-            "\tmirostat = %d, mirostat_lr = %.3f, mirostat_ent = %.3f",
+            "\tmirostat = %d, mirostat_lr = %.3f, mirostat_ent = %.3f, dry_multiplier = %.3f, dry_base = %.3f, dry_allowed_length = %d",
             params.penalty_last_n, params.penalty_repeat, params.penalty_freq, params.penalty_present,
             params.top_k, params.tfs_z, params.top_p, params.min_p, params.typical_p, params.temp,
-            params.mirostat, params.mirostat_eta, params.mirostat_tau);
+            params.mirostat, params.mirostat_eta, params.mirostat_tau, params.dry_multiplier, params.dry_base, params.dry_allowed_length);
 
     return std::string(result);
 }
@@ -314,12 +314,11 @@ static llama_token_data_array llama_sampling_prepare_impl(
 
         // DRY penalties (multiplier > 0 means enabled)
         if(dry_multiplier > 0.0f) {
-            llama_sample_dry(ctx_main, &cur_p,
+                llama_sample_dry(&cur_p,
                             penalty_tokens.data() + penalty_tokens.size() - penalty_tokens_used_size,
                             penalty_tokens_used_size, dry_base, dry_multiplier, dry_allowed_length,
                             params.dry_sequence_breakers.data(), params.dry_sequence_breakers.size());
         }
-        
 
         if (!penalize_nl) {
             for (size_t idx = 0; idx < cur_p.size; idx++) {
