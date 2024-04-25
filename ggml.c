@@ -963,7 +963,7 @@ inline static float vaddvq_f32(float32x4_t v) {
     #define GGML_F16_VEC_ZERO           GGML_F16x8_ZERO
     #define GGML_F16_VEC_SET1           GGML_F16x8_SET1
     #define GGML_F16_VEC_LOAD(p, i)     GGML_F16x8_LOAD(p)
-    #define GGML_F16_VEC_STORE(p, r, i) GGML_F16x8_STORE((__fp16 *)(p), r[i])
+    #define GGML_F16_VEC_STORE(p, r, i) GGML_F16x8_STORE((ggml_fp16_internal_t *)(p), r[i])
     #define GGML_F16_VEC_FMA            GGML_F16x8_FMA
     #define GGML_F16_VEC_ADD            GGML_F16x8_ADD
     #define GGML_F16_VEC_MUL            GGML_F16x8_MUL
@@ -989,7 +989,7 @@ inline static float vaddvq_f32(float32x4_t v) {
     #define GGML_F16_VEC_ZERO           GGML_F32Cx4_ZERO
     #define GGML_F16_VEC_SET1           GGML_F32Cx4_SET1
     #define GGML_F16_VEC_LOAD(p, i)     GGML_F32Cx4_LOAD(p)
-    #define GGML_F16_VEC_STORE(p, r, i) GGML_F32Cx4_STORE((__fp16 *)(p), r[i])
+    #define GGML_F16_VEC_STORE(p, r, i) GGML_F32Cx4_STORE((ggml_fp16_internal_t *)(p), r[i])
     #define GGML_F16_VEC_FMA            GGML_F32Cx4_FMA
     #define GGML_F16_VEC_ADD            GGML_F32Cx4_ADD
     #define GGML_F16_VEC_MUL            GGML_F32Cx4_MUL
@@ -1058,7 +1058,7 @@ do {                                                                  \
 
 // unlike  _mm256_cvt intrinsics that require F16C, _mm512_cvt is defined in AVX512F
 // so F16C guard isn't required
-#define GGML_F32Cx16_LOAD(x)     _mm512_cvtph_ps(_mm256_loadu_si256((__m256i *)(x)))
+#define GGML_F32Cx16_LOAD(x)     _mm512_cvtph_ps(_mm256_loadu_si256((const __m256i *)(x)))
 #define GGML_F32Cx16_STORE(x, y) _mm256_storeu_si256((__m256i *)(x), _mm512_cvtps_ph(y, 0))
 
 #define GGML_F32Cx16_FMA(a, b, c) _mm512_fmadd_ps(b, c, a)
@@ -5473,16 +5473,21 @@ static struct ggml_tensor * ggml_soft_max_impl(
     GGML_ASSERT(ggml_is_contiguous(a));
 
     if (mask) {
-        GGML_ASSERT(mask->type == GGML_TYPE_F16);
+        GGML_ASSERT(mask->type == GGML_TYPE_F16 || mask->type == GGML_TYPE_F32);
         GGML_ASSERT(ggml_is_contiguous(mask));
         GGML_ASSERT(ggml_is_matrix(mask));
+        GGML_ASSERT(mask->ne[0] == a->ne[0]);
         GGML_ASSERT(mask->ne[1] >= a->ne[1]);
     }
 
     if (pos) {
         GGML_ASSERT(ggml_is_vector(pos));
-        GGML_ASSERT(pos->type == GGML_TYPE_F16);
+        GGML_ASSERT(pos->type == GGML_TYPE_F16 || pos->type == GGML_TYPE_F32);
         GGML_ASSERT(pos->ne[0] == a->ne[0]);
+    }
+
+    if (pos && mask) {
+        GGML_ASSERT(pos->type == mask->type);
     }
 
     if (max_bias > 0.0f) {
@@ -6321,7 +6326,7 @@ struct ggml_tensor * ggml_flash_attn_ext(
 
     // permute(0, 2, 1, 3)
     int64_t ne[4] = { q->ne[0], q->ne[2], q->ne[1], q->ne[3] };
-    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, GGML_MAX_DIMS, ne);
+    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
 
     float params[] = { scale };
     ggml_set_op_params(result, params, sizeof(params));
@@ -12408,20 +12413,30 @@ static void ggml_compute_forward_soft_max_f32(
     float * wp = (float *) params->wdata + (nc + CACHE_LINE_SIZE_F32) * ith;
 
     // when max_bias <= 0.0f, src2 is not used and we default it to src0 to avoid branching
-    float * pos = src2 ? (float *) src2->data : src0->data;
+    ggml_fp16_t * pos_f16 = src2 ? (ggml_fp16_t *) src2->data : src0->data;
+    float       * pos_f32 = src2 ? (float       *) src2->data : src0->data;
+
+    const bool use_f16 = (src1 && src1->type == GGML_TYPE_F16) || (src2 && src2->type == GGML_TYPE_F16);
 
     for (int i1 = ir0; i1 < ir1; i1++) {
         float * sp = (float *)((char *) src0->data + i1*src0->nb[1]);
         float * dp = (float *)((char *)  dst->data +  i1*dst->nb[1]);
 
         // broadcast the mask across rows
-        ggml_fp16_t * mp = src1 ? (ggml_fp16_t *)((char *) src1->data) + (i1%ne01)*ne00 : NULL;
+        ggml_fp16_t * mp_f16 = src1 ? (ggml_fp16_t *)((char *) src1->data) + (i1%ne01)*ne00 : NULL;
+        float       * mp_f32 = src1 ? (float       *)((char *) src1->data) + (i1%ne01)*ne00 : NULL;
 
         ggml_vec_cpy_f32  (nc, wp, sp);
         ggml_vec_scale_f32(nc, wp, scale);
-        if (mp) {
-            for (int i = 0; i < nc; ++i) {
-                wp[i] += GGML_FP16_TO_FP32(mp[i]);
+        if (mp_f32) {
+            if (use_f16) {
+                for (int i = 0; i < nc; ++i) {
+                    wp[i] += GGML_FP16_TO_FP32(mp_f16[i]);
+                }
+            } else {
+                for (int i = 0; i < nc; ++i) {
+                    wp[i] += mp_f32[i];
+                }
             }
         }
 
@@ -12430,8 +12445,14 @@ static void ggml_compute_forward_soft_max_f32(
             const uint32_t h  = (i1/ne01)%ne02; // head
             const float slope = h < n_head_log2 ? powf(m0, h + 1) : powf(m1, 2*(h - n_head_log2) + 1);
 
-            for (int i = 0; i < nc; i++) {
-                wp[i] = wp[i] + slope*pos[i];
+            if (use_f16) {
+                for (int i = 0; i < nc; ++i) {
+                    wp[i] += slope*GGML_FP16_TO_FP32(pos_f16[i]);
+                }
+            } else {
+                for (int i = 0; i < nc; ++i) {
+                    wp[i] += slope*pos_f32[i];
+                }
             }
         }
 

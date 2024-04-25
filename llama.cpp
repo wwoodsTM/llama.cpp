@@ -1842,7 +1842,7 @@ struct llama_hparams {
     float f_logit_scale    = 0.0f;
 
     bool causal_attn = true;
-    bool need_kq_pos = false;
+    bool use_alibi   = false; // currently, we need KQ_pos data for ALiBi-based models
 
     enum llama_pooling_type      pooling_type            = LLAMA_POOLING_TYPE_NONE;
     enum llama_rope_type         rope_type               = LLAMA_ROPE_TYPE_NONE;
@@ -4133,7 +4133,7 @@ static void llm_load_hparams(
     model.ftype = ml.ftype;
 
     if (hparams.f_max_alibi_bias > 0.0f) {
-        hparams.need_kq_pos = true;
+        hparams.use_alibi = true;
     }
 
     hparams.rope_type = llama_rope_type(&model);
@@ -6115,29 +6115,27 @@ static void llm_build_kv_store(
             (ggml_row_size(kv.k_l[il]->type, n_embd_k_gqa))*kv_head);
     cb(k_cache_view, "k_cache_view", il);
 
-    // important: storing RoPE-ed version of K in the KV cache!
+    // note: storing RoPE-ed version of K in the KV cache
     ggml_build_forward_expand(graph, ggml_cpy(ctx, k_cur, k_cache_view));
 
+    assert(v_cur->ne[0] == n_embd_v_gqa && v_cur->ne[1] == n_tokens);
+
+    struct ggml_tensor * v_cache_view = nullptr;
+
     if (cparams.flash_attn) {
-        // NOTE: the V cache is not transposed when using FLASH attention !!
-        struct ggml_tensor * v_cache_view = ggml_view_1d(ctx, kv.v_l[il], n_tokens*n_embd_v_gqa,
-                (ggml_row_size(kv.v_l[il]->type, n_embd_v_gqa))*kv_head);
-        cb(v_cache_view, "v_cache_view", il);
-
-        ggml_build_forward_expand(graph, ggml_cpy(ctx, v_cur, v_cache_view));
+        v_cache_view = ggml_view_1d(ctx, kv.v_l[il], n_tokens*n_embd_v_gqa,
+                (kv_head)*ggml_row_size(kv.v_l[il]->type, n_embd_v_gqa));
     } else {
-        // compute the transposed [n_tokens, n_embd] V matrix
-        //struct ggml_tensor * v_cur_t = ggml_transpose(ctx, ggml_reshape_2d(ctx, v_cur, n_embd_v_gqa, n_tokens));
-        assert(v_cur->ne[0] == n_embd_v_gqa && v_cur->ne[1] == n_tokens);
-        struct ggml_tensor * v_cur_t = ggml_transpose(ctx, v_cur);
-        cb(v_cur_t, "v_cur_t", il);
-
-        struct ggml_tensor * v_cache_view = ggml_view_2d(ctx, kv.v_l[il], n_tokens, n_embd_v_gqa,
+        // note: the V cache is transposed when not using flash attention
+        v_cache_view = ggml_view_2d(ctx, kv.v_l[il], n_tokens, n_embd_v_gqa,
                 (  n_ctx)*ggml_element_size(kv.v_l[il]),
                 (kv_head)*ggml_element_size(kv.v_l[il]));
 
-        ggml_build_forward_expand(graph, ggml_cpy(ctx, v_cur_t, v_cache_view));
+        v_cur = ggml_transpose(ctx, v_cur);
     }
+    cb(v_cache_view, "v_cache_view", il);
+
+    ggml_build_forward_expand(graph, ggml_cpy(ctx, v_cur, v_cache_view));
 }
 
 static struct ggml_tensor * llm_build_norm(
@@ -6357,7 +6355,6 @@ static struct ggml_tensor * llm_build_moe_ffn(
     return moe_out;
 }
 
-// if max_alibi_bias > 0 then apply ALiBi
 static struct ggml_tensor * llm_build_kqv(
         struct ggml_context * ctx,
           const llama_model & model,
@@ -6400,11 +6397,13 @@ static struct ggml_tensor * llm_build_kqv(
         // ref: https://github.com/ggerganov/llama.cpp/pull/4490#issuecomment-1859055847
         ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
     }
-  
+
     if (cparams.flash_attn) {
         GGML_UNUSED(model);
         GGML_UNUSED(n_ctx);
 
+        // note: if this assert triggers, then some check has failed earlier
+        //       the idea is to detect during context creation that ALiBi would be used and disable Flash Attention
         GGML_ASSERT(kq_pos == nullptr && "ALiBi is not yet supported with Flash Attention");
 
         // split cached v into n_head heads (not transposed)
@@ -6418,21 +6417,16 @@ static struct ggml_tensor * llm_build_kqv(
 
         cur = ggml_flash_attn_ext(ctx, q, k, v, kq_mask, kq_scale);
 
-        if (model.arch == LLM_ARCH_PHI2) {
+        if (model.arch == LLM_ARCH_PHI2 || model.arch == LLM_ARCH_PHI3) {
             ggml_flash_attn_ext_set_prec(cur, GGML_PREC_F32);
         }
-        //printf("q: %4d %4d %4d %4d\n", q->ne[0], q->ne[1], q->ne[2], q->ne[3]);
-        //printf("k: %4d %4d %4d %4d\n", k->ne[0], k->ne[1], k->ne[2], k->ne[3]);
-        //printf("v: %4d %4d %4d %4d\n", v->ne[0], v->ne[1], v->ne[2], v->ne[3]);
-        //printf("m: %4d %4d %4d %4d\n", kq_mask->ne[0], kq_mask->ne[1], kq_mask->ne[2], kq_mask->ne[3]);
-        //printf("r: %4d %4d %4d %4d\n", kqv->ne[0], kqv->ne[1], kqv->ne[2], kqv->ne[3]);
 
         cur = ggml_reshape_2d(ctx, cur, n_embd_head_k*n_head, n_tokens);
     } else {
         struct ggml_tensor * kq = ggml_mul_mat(ctx, k, q);
         cb(kq, "kq", il);
 
-        if (model.arch == LLM_ARCH_PHI2) {
+        if (model.arch == LLM_ARCH_PHI2 || model.arch == LLM_ARCH_PHI3) {
             // for this arch, we need to perform the KQ multiplication with F32 precision, otherwise we get NaNs
             // ref: https://github.com/ggerganov/llama.cpp/pull/4490#issuecomment-1859055847
             ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
@@ -6456,7 +6450,7 @@ static struct ggml_tensor * llm_build_kqv(
 #pragma message("TODO: ALiBi support in ggml_soft_max_ext is not implemented for Kompute")
 #pragma message("      Falling back to ggml_alibi(). Will become an error in Mar 2024")
 #pragma message("ref:  https://github.com/ggerganov/llama.cpp/pull/5488")
-        if (hparams.f_max_alibi_bias > 0.0f) {
+        if (hparams.use_alibi) {
             kq = ggml_scale(ctx, kq, kq_scale);
             cb(kq, "kq_scaled", il);
 
@@ -6807,14 +6801,20 @@ struct llm_build_context {
         }
         cb(lctx.inp_KQ_mask, "KQ_mask", -1);
         ggml_set_input(lctx.inp_KQ_mask);
-        return ggml_cast(ctx0, lctx.inp_KQ_mask, GGML_TYPE_F16);
+        return flash_attn ? ggml_cast(ctx0, lctx.inp_KQ_mask, GGML_TYPE_F16) : lctx.inp_KQ_mask;
     }
 
-    struct ggml_tensor * build_inp_KQ_pos() {
-        lctx.inp_KQ_pos = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, n_kv);
+    struct ggml_tensor * build_inp_KQ_pos(bool causal = true) {
+        if (causal) {
+            lctx.inp_KQ_pos = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, n_kv);
+        } else {
+            // TODO: this will be needed for ALiBi-based BERT models
+            //       https://github.com/ggerganov/llama.cpp/pull/6826
+            lctx.inp_KQ_pos = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, n_tokens);
+        }
         cb(lctx.inp_KQ_pos, "KQ_pos", -1);
         ggml_set_input(lctx.inp_KQ_pos);
-        return ggml_cast(ctx0, lctx.inp_KQ_pos, GGML_TYPE_F16);
+        return flash_attn ? ggml_cast(ctx0, lctx.inp_KQ_pos, GGML_TYPE_F16) : lctx.inp_KQ_pos;
     }
 
     struct ggml_tensor * build_inp_mean() {
@@ -9167,9 +9167,9 @@ struct llm_build_context {
                 );
                 cb(Kcur, "Kcur", il);
 
-                cur = llm_build_kv(ctx0, model, hparams, kv_self, gf,
-                    model.layers[il].wo, NULL,
-                    Kcur, Vcur, Qcur, KQ_mask, nullptr, n_ctx, n_tokens, kv_head, n_kv, 1.0f, cb, il);
+                cur = llm_build_kv(ctx0, model, hparams, cparams, kv_self, gf,
+                        model.layers[il].wo, model.layers[il].bo,
+                        Kcur, Vcur, Qcur, KQ_mask, nullptr, n_tokens, kv_head, n_kv, 1.0f, cb, il);
             }
 
             if (il == n_layer - 1) {
@@ -10514,9 +10514,9 @@ struct llm_build_context {
                 );
                 cb(Kcur, "Kcur", il);
 
-                cur = llm_build_kv(ctx0, model, hparams, kv_self, gf,
+                cur = llm_build_kv(ctx0, model, hparams, cparams, kv_self, gf,
                         model.layers[il].wo, nullptr,
-                        Kcur, Vcur, Qcur, KQ_mask, nullptr, n_ctx, n_tokens, kv_head, n_kv, 1.0f/sqrtf(float(n_embd_head)), cb, il);
+                        Kcur, Vcur, Qcur, KQ_mask, nullptr, n_tokens, kv_head, n_kv, 1.0f/sqrtf(float(n_embd_head)), cb, il);
             }
 
             if (il == n_layer - 1) {
@@ -10943,7 +10943,9 @@ static void llama_set_inputs(llama_context & lctx, const llama_batch & batch) {
         }
     }
 
-    if (hparams.need_kq_pos) {
+    // ALiBi requires the KQ_pos tensor to provide the sequence position of each token in the batch
+    // this allows to process multiple sequences in parallel with ALiBi-based models
+    if (hparams.use_alibi) {
         const int64_t n_kv = kv_self.n;
 
         GGML_ASSERT(lctx.inp_KQ_pos);
@@ -15372,10 +15374,6 @@ struct llama_context * llama_new_context_with_model(
     const auto & hparams = model->hparams;
     auto       & cparams = ctx->cparams;
 
-    // the batch has to be at least GGML_KQ_MASK_PAD because we will be padding the KQ_mask
-    // this is required by GPU kernels in order to avoid out-of-bounds accesses (e.g. ggml_flash_attn_ext)
-    cparams.n_batch          = std::max((uint32_t) GGML_KQ_MASK_PAD, params.n_batch);
-
     cparams.n_seq_max        = std::max(1u, params.n_seq_max);
     cparams.n_threads        = params.n_threads;
     cparams.n_threads_batch  = params.n_threads_batch;
@@ -15394,12 +15392,20 @@ struct llama_context * llama_new_context_with_model(
     cparams.rope_freq_scale  = params.rope_freq_scale == 0.0f ? hparams.rope_freq_scale_train : params.rope_freq_scale;
 
     // this is necessary due to kv_self.n being padded later during inference
-    cparams.n_ctx = GGML_PAD(cparams.n_ctx, 256);
+    cparams.n_ctx            = GGML_PAD(cparams.n_ctx, 256);
 
     // with causal attention, the batch size is limited by the context size
     cparams.n_batch          = hparams.causal_attn ? std::min(cparams.n_ctx, params.n_batch) : params.n_batch;
-    cparams.n_ubatch         = std::min(cparams.n_batch, params.n_ubatch == 0 ? params.n_batch : params.n_ubatch);
 
+    // the batch has to be at least GGML_KQ_MASK_PAD because we will be padding the KQ_mask
+    // this is required by GPU kernels in order to avoid out-of-bounds accesses (e.g. ggml_flash_attn_ext)
+    // ref: https://github.com/ggerganov/llama.cpp/pull/5021
+    if (cparams.n_batch < GGML_KQ_MASK_PAD) {
+        LLAMA_LOG_WARN("%s: n_batch is less than GGML_KQ_MASK_PAD - increasing to %d\n", __func__, GGML_KQ_MASK_PAD);
+        cparams.n_batch = GGML_KQ_MASK_PAD;
+    }
+
+    cparams.n_ubatch         = std::min(cparams.n_batch, params.n_ubatch == 0 ? params.n_batch : params.n_ubatch);
 
     cparams.n_yarn_orig_ctx  = params.yarn_orig_ctx    != 0 ? params.yarn_orig_ctx    :
                                hparams.n_yarn_orig_ctx != 0 ? hparams.n_yarn_orig_ctx :
@@ -15431,6 +15437,23 @@ struct llama_context * llama_new_context_with_model(
         }
     }
 
+    if (cparams.flash_attn && hparams.use_alibi) {
+        LLAMA_LOG_WARN("%s: flash_attn is not yet compatible with ALiBi - forcing off\n", __func__);
+        cparams.flash_attn = false;
+    }
+
+    if (cparams.flash_attn && model->arch == LLM_ARCH_GROK) {
+        LLAMA_LOG_WARN("%s: flash_attn is not compatible with Grok - forcing off\n", __func__);
+        cparams.flash_attn = false;
+    }
+
+#ifdef GGML_USE_HIPBLAS
+    if (cparams.flash_attn) {
+        LLAMA_LOG_WARN("%s: flash_attn is not yet compatible with HIPBLAS builds - forcing off\n", __func__);
+        cparams.flash_attn = false;
+    }
+#endif
+
     if (params.seed == LLAMA_DEFAULT_SEED) {
         params.seed = time(NULL);
     }
@@ -15438,6 +15461,7 @@ struct llama_context * llama_new_context_with_model(
     LLAMA_LOG_INFO("%s: n_ctx      = %u\n",     __func__, cparams.n_ctx);
     LLAMA_LOG_INFO("%s: n_batch    = %u\n",     __func__, cparams.n_batch);
     LLAMA_LOG_INFO("%s: n_ubatch   = %u\n",     __func__, cparams.n_ubatch);
+    LLAMA_LOG_INFO("%s: flash_attn = %d\n",     __func__, cparams.flash_attn);
     LLAMA_LOG_INFO("%s: freq_base  = %.1f\n",   __func__, cparams.rope_freq_base);
     LLAMA_LOG_INFO("%s: freq_scale = %g\n",     __func__, cparams.rope_freq_scale);
 

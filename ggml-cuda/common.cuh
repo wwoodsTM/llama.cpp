@@ -307,9 +307,9 @@ static __device__ __forceinline__ half2 warp_reduce_max(half2 x) {
 }
 
 #if CUDART_VERSION < 12000
-static __device__ __forceinline__ uint __hgt2_mask(const half2 a, const half2 b) {
-    const uint mask_low  = 0x0000FFFF * ( __low2half(a) >  __low2half(b));
-    const uint mask_high = 0xFFFF0000 * (__high2half(a) > __high2half(b));
+static __device__ __forceinline__ uint32_t __hgt2_mask(const half2 a, const half2 b) {
+    const uint32_t mask_low  = 0x0000FFFF * (float( __low2half(a)) > float( __low2half(b)));
+    const uint32_t mask_high = 0xFFFF0000 * (float(__high2half(a)) > float(__high2half(b)));
     return mask_low | mask_high;
 }
 #endif // CUDART_VERSION < 12000
@@ -399,8 +399,8 @@ static __device__ __forceinline__ int __dp4a(const int a, const int b, int c) {
 
 #define FP16_AVAILABLE     defined(GGML_USE_HIPBLAS) && defined(__HIP_PLATFORM_AMD__) ? \
     defined(RDNA1) || defined(RDNA2) || defined(RDNA3) : __CUDA_ARCH__ >= CC_PASCAL
-#define FP16_MMA_AVAILABLE defined(GGML_USE_HIPBLAS) && defined(__HIP_PLATFORM_AMD__) ? \
-                                        defined(RDNA3) : __CUDA_ARCH__ >= CC_VOLTA
+
+#define FP16_MMA_AVAILABLE !(defined(GGML_USE_HIPBLAS) && defined(__HIP_PLATFORM_AMD__)) && __CUDA_ARCH__ >= CC_VOLTA
 
 // TODO: move to ggml-common.h
 static const __device__ int8_t kvalues_iq4nl[16] = {-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113};
