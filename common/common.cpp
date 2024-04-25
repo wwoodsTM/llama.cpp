@@ -108,6 +108,79 @@ int32_t get_num_physical_cores() {
     return n_threads > 0 ? (n_threads <= 4 ? n_threads : n_threads / 2) : 4;
 }
 
+#if defined(__x86_64__) && defined(__linux__)
+#include <pthread.h>
+
+static void cpuid(unsigned leaf, unsigned subleaf,
+                  unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx) {
+    __asm__("movq\t%%rbx,%%rsi\n\t"
+            "cpuid\n\t"
+            "xchgq\t%%rbx,%%rsi"
+            : "=a"(*eax), "=S"(*ebx), "=c"(*ecx), "=d"(*edx)
+            : "0"(leaf), "2"(subleaf));
+}
+
+static int pin_cpu(int cpu) {
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    CPU_SET(cpu, &mask);
+    return pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask);
+}
+
+static bool is_hybrid_cpu(void) {
+    unsigned eax, ebx, ecx, edx;
+    cpuid(7, 0, &eax, &ebx, &ecx, &edx);
+    return !!(edx & (1u << 15));
+}
+
+static bool is_running_on_efficiency_core(void) {
+    unsigned eax, ebx, ecx, edx;
+    cpuid(0x1a, 0, &eax, &ebx, &ecx, &edx);
+    int intel_atom = 0x20;
+    int core_type = (eax & 0xff000000u) >> 24;
+    return core_type == intel_atom;
+}
+
+static int count_math_cpus(int cpu_count) {
+    int result = 0;
+    for (int cpu = 0; cpu < cpu_count; ++cpu) {
+        if (pin_cpu(cpu)) {
+            return -1;
+        }
+        if (is_running_on_efficiency_core()) {
+            continue; // efficiency cores harm lockstep threading
+        }
+        ++cpu; // hyperthreading isn't useful for linear algebra
+        ++result;
+    }
+    return result;
+}
+
+#endif // __x86_64__ && __linux__
+
+/**
+ * Returns number of CPUs on system that are useful for math.
+ */
+int get_math_cpu_count() {
+#if defined(__x86_64__) && defined(__linux__)
+    int cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
+    if (cpu_count < 1) {
+        return get_num_physical_cores();
+    }
+    if (is_hybrid_cpu()) {
+        cpu_set_t affinity;
+        if (!pthread_getaffinity_np(pthread_self(), sizeof(affinity), &affinity)) {
+            int result = count_math_cpus(cpu_count);
+            pthread_setaffinity_np(pthread_self(), sizeof(affinity), &affinity);
+            if (result > 0) {
+                return result;
+            }
+        }
+    }
+#endif
+    return get_num_physical_cores();
+}
+
 void process_escapes(std::string & input) {
     std::size_t input_len = input.length();
     std::size_t output_idx = 0;
@@ -825,6 +898,10 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
     }
     if (arg == "-cb" || arg == "--cont-batching") {
         params.cont_batching = true;
+        return true;
+    }
+    if (arg == "-fa" || arg == "--flash-attn") {
+        params.flash_attn = true;
         return true;
     }
     if (arg == "--color") {
@@ -1763,6 +1840,7 @@ struct llama_context_params llama_context_params_from_gpt_params(const gpt_param
     cparams.cb_eval           = params.cb_eval;
     cparams.cb_eval_user_data = params.cb_eval_user_data;
     cparams.offload_kqv       = !params.no_kv_offload;
+    cparams.flash_attn        = params.flash_attn;
 
     cparams.type_k = kv_cache_type_from_str(params.cache_type_k);
     cparams.type_v = kv_cache_type_from_str(params.cache_type_v);
@@ -2600,6 +2678,7 @@ void dump_non_result_info_yaml(FILE * stream, const gpt_params & params, const l
     fprintf(stream, "seed: %u # default: -1 (random seed)\n", params.seed);
     fprintf(stream, "simple_io: %s # default: false\n", params.simple_io ? "true" : "false");
     fprintf(stream, "cont_batching: %s # default: false\n", params.cont_batching ? "true" : "false");
+    fprintf(stream, "flash_attn: %s # default: false\n", params.flash_attn ? "true" : "false");
     fprintf(stream, "temp: %f # default: 0.8\n", sparams.temp);
 
     const std::vector<float> tensor_split_vector(params.tensor_split, params.tensor_split + llama_max_devices());

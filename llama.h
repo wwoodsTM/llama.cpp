@@ -270,6 +270,7 @@ extern "C" {
         bool logits_all;  // the llama_decode() call computes all logits, not just the last one (DEPRECATED - set llama_batch.logits instead)
         bool embeddings;  // if true, extract embeddings (together with logits)
         bool offload_kqv; // whether to offload the KQV ops (including the KV cache) to GPU
+        bool flash_attn;  // whether to use flash attention
 
         // Abort callback
         // if it returns true, execution of llama_decode() will be aborted
@@ -916,6 +917,18 @@ extern "C" {
           llama_token_data_array * candidates,
                            float   p,
                           size_t   min_keep);
+
+    ///  @details DRY sampler as described in: https://github.com/oobabooga/text-generation-webui/pull/5677
+    LLAMA_API void llama_sample_dry(
+            struct llama_context * ctx,
+          llama_token_data_array * candidates,
+               const llama_token * last_tokens,
+                             int   last_tokens_size,
+                           float   dry_base,
+                           float   dry_multiplier,
+                             int   dry_allowed_length,
+               const llama_token * seq_breakers,
+                             int   seq_breakers_size);
 
     /// @details Tail Free Sampling described in https://www.trentonbricken.com/Tail-Free-Sampling/.
     LLAMA_API void llama_sample_tail_free(
