@@ -6391,6 +6391,9 @@ static struct ggml_tensor * llm_build_kqv(
     cb(k, "k", il);
 
     struct ggml_tensor * cur;
+    
+    struct ggml_tensor * kq = ggml_mul_mat(ctx, k, q);
+        cb(kq, "kq", il);
 
     if (model.arch == LLM_ARCH_PHI2 || model.arch == LLM_ARCH_PHI3) {
         // for this arch, we need to perform the KQ multiplication with F32 precision, otherwise we get NaNs
@@ -6423,9 +6426,6 @@ static struct ggml_tensor * llm_build_kqv(
 
         cur = ggml_reshape_2d(ctx, cur, n_embd_head_k*n_head, n_tokens);
     } else {
-        struct ggml_tensor * kq = ggml_mul_mat(ctx, k, q);
-        cb(kq, "kq", il);
-
         if (model.arch == LLM_ARCH_PHI2 || model.arch == LLM_ARCH_PHI3) {
             // for this arch, we need to perform the KQ multiplication with F32 precision, otherwise we get NaNs
             // ref: https://github.com/ggerganov/llama.cpp/pull/4490#issuecomment-1859055847
