@@ -41,6 +41,9 @@ typedef struct llama_sampling_params {
     float       mirostat_eta          = 0.10f;              // learning rate
     bool        penalize_nl           = false;              // consider newlines as a repeatable token
     uint32_t    seed                  = LLAMA_DEFAULT_SEED; // the seed used to initialize llama_sampling_context
+    float       dry_multiplier        = 0.0f;     // 0.0f = disabled, recommended value: 0.8f
+    float       dry_base              = 1.75f;
+    int         dry_allowed_length    = 2;
 
     std::vector<llama_sampler_type> samplers_sequence = {
         llama_sampler_type::TOP_K,
@@ -61,6 +64,7 @@ typedef struct llama_sampling_params {
     std::unordered_map<llama_token, float> logit_bias; // logit bias for specific tokens
 
     std::vector<llama_token> penalty_prompt_tokens;
+    std::vector<llama_token> dry_sequence_breakers; // sequence breakers for the DRY sampler
     bool                     use_penalty_prompt_tokens = false;
 } llama_sampling_params;
 
@@ -91,6 +95,9 @@ struct llama_sampling_context {
 struct llama_sampling_context * llama_sampling_init(const struct llama_sampling_params & params);
 
 void llama_sampling_free(struct llama_sampling_context * ctx);
+
+// Reset the sampler grammar without resetting the context
+void llama_sampling_reset_grammar(struct llama_sampling_context * ctx);
 
 // Reset the sampler context
 // - clear prev tokens
@@ -152,3 +159,7 @@ void llama_sampling_accept(
         struct llama_context * ctx_main,
         llama_token id,
         bool apply_grammar);
+
+void llama_sampling_rollback(
+        struct llama_sampling_context * ctx_sampling,
+        int rollback_num);

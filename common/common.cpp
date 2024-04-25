@@ -584,6 +584,30 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
         sparams.penalty_present = std::stof(argv[i]);
         return true;
     }
+    if (arg == "--dry-multiplier") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_multiplier = std::stof(argv[i]);
+        return true;
+    }
+    if (arg == "--dry-base") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_base = std::stoi(argv[i]);
+        return true;
+    }
+    if (arg == "--dry-allowed-length") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_allowed_length = std::stoi(argv[i]);
+        return true;
+    }
     if (arg == "--dynatemp-range") {
         if (++i >= argc) {
             invalid_param = true;
@@ -900,6 +924,10 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
     }
     if (arg == "-cb" || arg == "--cont-batching") {
         params.cont_batching = true;
+        return true;
+    }
+    if (arg == "-fa" || arg == "--flash-attn") {
+        params.flash_attn = true;
         return true;
     }
     if (arg == "--color") {
@@ -1427,6 +1455,10 @@ void gpt_print_usage(int /*argc*/, char ** argv, const gpt_params & params) {
     printf("  --repeat-penalty N    penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)\n", (double)sparams.penalty_repeat);
     printf("  --presence-penalty N  repeat alpha presence penalty (default: %.1f, 0.0 = disabled)\n", (double)sparams.penalty_present);
     printf("  --frequency-penalty N repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)\n", (double)sparams.penalty_freq);
+    printf("  --dry-multiplier N    DRY sampler multiplier (default: %.1f, 0.0 = disabled)\n", (double)sparams.dry_multiplier);
+    printf("  --dry-base N          DRY sampler base (default: %.1f)\n", (double)sparams.dry_base);
+    printf("  --dry-allowed-length N\n");
+    printf("                        DRY sampler allowed length (default: %d)\n", sparams.dry_allowed_length);
     printf("  --dynatemp-range N    dynamic temperature range (default: %.1f, 0.0 = disabled)\n", (double)sparams.dynatemp_range);
     printf("  --dynatemp-exp N      dynamic temperature exponent (default: %.1f)\n", (double)sparams.dynatemp_exponent);
     printf("  --mirostat N          use Mirostat sampling.\n");
@@ -1838,6 +1870,7 @@ struct llama_context_params llama_context_params_from_gpt_params(const gpt_param
     cparams.cb_eval           = params.cb_eval;
     cparams.cb_eval_user_data = params.cb_eval_user_data;
     cparams.offload_kqv       = !params.no_kv_offload;
+    cparams.flash_attn        = params.flash_attn;
 
     cparams.type_k = kv_cache_type_from_str(params.cache_type_k);
     cparams.type_v = kv_cache_type_from_str(params.cache_type_v);
@@ -2675,6 +2708,7 @@ void dump_non_result_info_yaml(FILE * stream, const gpt_params & params, const l
     fprintf(stream, "seed: %u # default: -1 (random seed)\n", params.seed);
     fprintf(stream, "simple_io: %s # default: false\n", params.simple_io ? "true" : "false");
     fprintf(stream, "cont_batching: %s # default: false\n", params.cont_batching ? "true" : "false");
+    fprintf(stream, "flash_attn: %s # default: false\n", params.flash_attn ? "true" : "false");
     fprintf(stream, "temp: %f # default: 0.8\n", sparams.temp);
 
     const std::vector<float> tensor_split_vector(params.tensor_split, params.tensor_split + llama_max_devices());
