@@ -39,6 +39,7 @@ cmake-build-*
 out/
 tmp/
 
+loras/*
 models/*
 models-mnt
 

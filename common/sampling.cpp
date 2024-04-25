@@ -44,10 +44,10 @@ void llama_sampling_free(struct llama_sampling_context * ctx) {
     delete ctx;
 }
 
-void llama_sampling_reset(llama_sampling_context * ctx) {
+void llama_sampling_reset_grammar(struct llama_sampling_context * ctx) {
     if (ctx->grammar != NULL) {
         llama_grammar_free(ctx->grammar);
-        ctx->grammar = NULL;
+        ctx->grammar = nullptr;
     }
 
     if (!ctx->parsed_grammar.rules.empty()) {
@@ -57,6 +57,10 @@ void llama_sampling_reset(llama_sampling_context * ctx) {
                 grammar_rules.data(),
                 grammar_rules.size(), ctx->parsed_grammar.symbol_ids.at("root"));
     }
+}
+
+void llama_sampling_reset(llama_sampling_context * ctx) {
+    llama_sampling_reset_grammar(ctx);
 
     std::fill(ctx->prev.begin(), ctx->prev.end(), 0);
     ctx->cur.clear();
@@ -310,12 +314,11 @@ static llama_token_data_array llama_sampling_prepare_impl(
 
         // DRY penalties (multiplier > 0 means enabled)
         if(dry_multiplier > 0.0f) {
-            llama_sample_dry(&cur_p,
+                llama_sample_dry(&cur_p,
                             penalty_tokens.data() + penalty_tokens.size() - penalty_tokens_used_size,
                             penalty_tokens_used_size, dry_base, dry_multiplier, dry_allowed_length,
                             params.dry_sequence_breakers.data(), params.dry_sequence_breakers.size());
         }
-
 
         if (!penalize_nl) {
             for (size_t idx = 0; idx < cur_p.size; idx++) {
@@ -365,4 +368,15 @@ void llama_sampling_accept(
     if (ctx_sampling->grammar != NULL && apply_grammar) {
         llama_grammar_accept_token(ctx_main, ctx_sampling->grammar, id);
     }
+}
+
+
+void llama_sampling_rollback(
+        struct llama_sampling_context * ctx_sampling,
+        int rollback_num) {
+    if(rollback_num > ctx_sampling->prev.size()) {
+        rollback_num = ctx_sampling->prev.size();
+    }
+
+    ctx_sampling->prev.erase(ctx_sampling->prev.end() - rollback_num, ctx_sampling->prev.end());
 }

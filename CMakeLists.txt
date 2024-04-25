@@ -295,6 +295,8 @@ if (LLAMA_METAL)
 endif()
 
 if (LLAMA_BLAS)
+    message(STATUS "Building with OpenBLAS")
+
     if (LLAMA_STATIC)
         set(BLA_STATIC ON)
     endif()
@@ -303,77 +305,14 @@ if (LLAMA_BLAS)
     endif()
 
     set(BLA_VENDOR ${LLAMA_BLAS_VENDOR})
-    find_package(BLAS)
+    add_compile_options(${BLAS_LINKER_FLAGS})
 
-    if (BLAS_FOUND)
-        message(STATUS "BLAS found, Libraries: ${BLAS_LIBRARIES}")
+    add_compile_definitions(GGML_USE_OPENBLAS)
 
-        if ("${BLAS_INCLUDE_DIRS}" STREQUAL "")
-            # BLAS_INCLUDE_DIRS is missing in FindBLAS.cmake.
-            # see https://gitlab.kitware.com/cmake/cmake/-/issues/20268
-            find_package(PkgConfig REQUIRED)
-            if (${LLAMA_BLAS_VENDOR} MATCHES "Generic")
-                pkg_check_modules(DepBLAS REQUIRED blas)
-            elseif (${LLAMA_BLAS_VENDOR} MATCHES "OpenBLAS")
-                # As of openblas v0.3.22, the 64-bit is named openblas64.pc
-                pkg_check_modules(DepBLAS openblas64)
-                if (NOT DepBLAS_FOUND)
-                    pkg_check_modules(DepBLAS REQUIRED openblas)
-                endif()
-            elseif (${LLAMA_BLAS_VENDOR} MATCHES "FLAME")
-                pkg_check_modules(DepBLAS REQUIRED blis)
-            elseif (${LLAMA_BLAS_VENDOR} MATCHES "ATLAS")
-                pkg_check_modules(DepBLAS REQUIRED blas-atlas)
-            elseif (${LLAMA_BLAS_VENDOR} MATCHES "FlexiBLAS")
-                pkg_check_modules(DepBLAS REQUIRED flexiblas_api)
-            elseif (${LLAMA_BLAS_VENDOR} MATCHES "Intel")
-                # all Intel* libraries share the same include path
-                pkg_check_modules(DepBLAS REQUIRED mkl-sdl)
-            elseif (${LLAMA_BLAS_VENDOR} MATCHES "NVHPC")
-                # this doesn't provide pkg-config
-                # suggest to assign BLAS_INCLUDE_DIRS on your own
-                if ("${NVHPC_VERSION}" STREQUAL "")
-                    message(WARNING "Better to set NVHPC_VERSION")
-                else()
-                    set(DepBLAS_FOUND ON)
-                    set(DepBLAS_INCLUDE_DIRS "/opt/nvidia/hpc_sdk/${CMAKE_SYSTEM_NAME}_${CMAKE_SYSTEM_PROCESSOR}/${NVHPC_VERSION}/math_libs/include")
-                endif()
-            endif()
-            if (DepBLAS_FOUND)
-                set(BLAS_INCLUDE_DIRS ${DepBLAS_INCLUDE_DIRS})
-            else()
-                message(WARNING "BLAS_INCLUDE_DIRS neither been provided nor been automatically"
-                " detected by pkgconfig, trying to find cblas.h from possible paths...")
-                find_path(BLAS_INCLUDE_DIRS
-                    NAMES cblas.h
-                    HINTS
-                        /usr/include
-                        /usr/local/include
-                        /usr/include/openblas
-                        /opt/homebrew/opt/openblas/include
-                        /usr/local/opt/openblas/include
-                        /usr/include/x86_64-linux-gnu/openblas/include
-                )
-            endif()
-        endif()
+    add_subdirectory(../OpenBLAS ${CMAKE_CURRENT_BINARY_DIR}/OpenBLAS)
 
-        message(STATUS "BLAS found, Includes: ${BLAS_INCLUDE_DIRS}")
-
-        add_compile_options(${BLAS_LINKER_FLAGS})
-
-        add_compile_definitions(GGML_USE_OPENBLAS)
-
-        if (${BLAS_INCLUDE_DIRS} MATCHES "mkl" AND (${LLAMA_BLAS_VENDOR} MATCHES "Generic" OR ${LLAMA_BLAS_VENDOR} MATCHES "Intel"))
-            add_compile_definitions(GGML_BLAS_USE_MKL)
-        endif()
-
-        set(LLAMA_EXTRA_LIBS     ${LLAMA_EXTRA_LIBS}     ${BLAS_LIBRARIES})
-        set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ${BLAS_INCLUDE_DIRS})
-    else()
-        message(WARNING "BLAS not found, please refer to "
-        "https://cmake.org/cmake/help/latest/module/FindBLAS.html#blas-lapack-vendors"
-        " to set correct LLAMA_BLAS_VENDOR")
-    endif()
+    set(LLAMA_EXTRA_LIBS     ${LLAMA_EXTRA_LIBS}     openblas_shared)
+    set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ../OpenBLAS ${CMAKE_CURRENT_BINARY_DIR}/OpenBLAS)
 endif()
 
 if (LLAMA_LLAMAFILE)
@@ -489,19 +428,24 @@ if (LLAMA_MPI)
 endif()
 
 if (LLAMA_CLBLAST)
-    find_package(CLBlast)
-    if (CLBlast_FOUND)
-        message(STATUS "CLBlast found")
+    message(STATUS "Building with CLBlast")
 
-        set(GGML_HEADERS_OPENCL ggml-opencl.h)
-        set(GGML_SOURCES_OPENCL ggml-opencl.cpp)
+    set(GGML_HEADERS_OPENCL ggml-opencl.h)
+    set(GGML_SOURCES_OPENCL ggml-opencl.cpp)
 
-        add_compile_definitions(GGML_USE_CLBLAST)
+    add_compile_definitions(GGML_USE_CLBLAST)
 
-        set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} clblast)
-    else()
-        message(WARNING "CLBlast not found")
-    endif()
+    # link our libOpenCL.so (this is only used during compile time)
+    add_library(OpenCL SHARED IMPORTED)
+    set_target_properties(OpenCL PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/../OpenCL/lib/libOpenCL.so)
+
+    # add our prebuilt clblast library
+    add_library(clblast SHARED IMPORTED)
+    set_target_properties(clblast PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/../../android/app/src/main/jniLibs/${ANDROID_ABI}/libclblast.so)
+
+    set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} clblast OpenCL)
+    set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ../CLBlast/include)
+    set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ../OpenCL/include)
 endif()
 
 if (LLAMA_VULKAN)
