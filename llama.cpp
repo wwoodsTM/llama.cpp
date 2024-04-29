@@ -6449,7 +6449,7 @@ static struct ggml_tensor * llm_build_kqv(
     cb(k, "k", il);
 
     struct ggml_tensor * cur;
-    
+
     struct ggml_tensor * kq = ggml_mul_mat(ctx, k, q);
         cb(kq, "kq", il);
 
@@ -13369,7 +13369,7 @@ void llama_sample_min_p(struct llama_context * ctx, llama_token_data_array * can
     }
 }
 
-void llama_sample_dry(llama_token_data_array * candidates, const llama_token * last_tokens, int last_tokens_size, float dry_base, float dry_multiplier, int dry_allowed_length, const llama_token * dry_seq_breakers, int dry_seq_breakers_size) {
+void llama_sample_dry(llama_token_data_array * candidates, const llama_token * last_tokens, size_t last_tokens_size, float dry_base, float dry_multiplier, int dry_allowed_length, const llama_token * dry_seq_breakers, size_t dry_seq_breakers_size) {
     // skip dry sampler if we don't have a previous token
     if (last_tokens_size < 1) return;
 
