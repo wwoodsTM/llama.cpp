@@ -13307,15 +13307,15 @@ void llama_sample_min_p(struct llama_context * ctx, llama_token_data_array * can
     }
 }
 
-void llama_sample_dry(llama_token_data_array * candidates, const llama_token * last_tokens, size_t last_tokens_size, float dry_base, float dry_multiplier, int dry_allowed_length, const llama_token * seq_breakers, size_t seq_breakers_size) {
-    // sanity check
-    GGML_ASSERT(last_tokens_size > 0);
+void llama_sample_dry(llama_token_data_array * candidates, const llama_token * last_tokens, int last_tokens_size, float dry_base, float dry_multiplier, int dry_allowed_length, const llama_token * dry_seq_breakers, int dry_seq_breakers_size) {
+    // skip dry sampler if we don't have a previous token
+    if (last_tokens_size < 1) return;
 
     // get the last token
     auto last_token = last_tokens[last_tokens_size - 1];
 
     // if last token is part of the sequence breakers, skip whole sampler
-    if(std::find(seq_breakers, seq_breakers + seq_breakers_size, last_token) != seq_breakers + seq_breakers_size) {
+    if (std::find(dry_seq_breakers, dry_seq_breakers + dry_seq_breakers_size, last_token) != dry_seq_breakers + dry_seq_breakers_size) {
         return;
     }
 
@@ -13324,21 +13324,26 @@ void llama_sample_dry(llama_token_data_array * candidates, const llama_token * l
 
     // loop through each previous token (exclude the last token)
     for (size_t i = 0; i < last_tokens_size - 1; ++i) {
-        // skip if the compare token if it's not the same as the last token
-        if(last_tokens[i] != last_token) {
+        // skip if the compare token is not the same as the last token
+        if (last_tokens[i] != last_token) {
             continue;
         }
 
         // get the next token (i + 1 is always less than last_tokens_size)
         auto next_token = last_tokens[i + 1];
 
-        // try to extend the match backwards (match length starts a 1 because last token is already matched)
+        // if next token is part of the sequence breakers, skip
+        if (std::find(dry_seq_breakers, dry_seq_breakers + dry_seq_breakers_size, next_token) != dry_seq_breakers + dry_seq_breakers_size) {
+            continue;
+        }
+
+        // try to extend the match backwards (match length starts at 1 because last token is already matched)
         size_t match_length = 1;
 
         // loop through the previous tokens
-        for(;; match_length++) {
+        for (;; match_length++) {
             // if we have reached the start of our last tokens, break
-            if(i < match_length) break;
+            if (i < match_length) break;
 
             // compare token starts at our prev index, going backwards by match length
             auto compare_token = last_tokens[i - match_length];
@@ -13346,13 +13351,15 @@ void llama_sample_dry(llama_token_data_array * candidates, const llama_token * l
             // head token starts at the end of last tokens, going backwards by match length, minus 1 because we start at the last token itself
             auto head_token = last_tokens[last_tokens_size - 1 - match_length];
 
-            // if compare token is part of the sequence breakers, break out of the match
-            if(std::find(seq_breakers, seq_breakers + seq_breakers_size, compare_token) != seq_breakers + seq_breakers_size)
-                break;
-
             // break out of the match if any tokens don't match
-            if(compare_token != head_token)
+            if (compare_token != head_token) {
                 break;
+            }
+
+            // if compare token is part of the sequence breakers, break out of the match
+            if (std::find(dry_seq_breakers, dry_seq_breakers + dry_seq_breakers_size, compare_token) != dry_seq_breakers + dry_seq_breakers_size) {
+                break;
+            }
         }
 
         // Check if the next token exists in the map
@@ -13372,12 +13379,11 @@ void llama_sample_dry(llama_token_data_array * candidates, const llama_token * l
         auto next_token = pair.first;
         auto match_length = pair.second;
 
-        // if the match length is greater than our allowed length in config, we apply penalities
-        if(match_length > dry_allowed_length) {
+        // if the match length is greater than or equal to our allowed length in config, we apply penalities
+        if (match_length >= dry_allowed_length) {
 
             // find our next token in the candidates->data
-            size_t i = 0;
-            for (; i < candidates->size; ++i) {
+            for (size_t i = 0; i < candidates->size; ++i) {
                 if (candidates->data[i].id == next_token) {
                     // calculate the penalty
                     float penalty = dry_multiplier * pow(dry_base, match_length - dry_allowed_length);

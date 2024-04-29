@@ -933,8 +933,8 @@ extern "C" {
                            float   dry_base,
                            float   dry_multiplier,
                              int   dry_allowed_length,
-               const llama_token * seq_breakers,
-                          size_t   seq_breakers_size);
+               const llama_token * dry_seq_breakers,
+                          size_t   dry_seq_breakers_size);
 
     /// @details Tail Free Sampling described in https://www.trentonbricken.com/Tail-Free-Sampling/.
     LLAMA_API void llama_sample_tail_free(
