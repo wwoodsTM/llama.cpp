@@ -2359,7 +2359,7 @@ static bool llama_kv_cache_init(
     cache.recurrent = model.arch == LLM_ARCH_MAMBA;
     cache.v_trans   = !cparams.flash_attn;
 
-    // TODO: support mixed reccurent Transformer architectues
+    // TODO: support mixed recurrent Transformer architectures
     // NOTE: (!a || b) is a logical implication (a -> b)
     GGML_ASSERT(!cache.recurrent || n_embd_k_gqa == hparams.n_embd_k_s());
     GGML_ASSERT(!cache.recurrent || n_embd_v_gqa == hparams.n_embd_v_s());
@@ -6508,15 +6508,6 @@ static struct ggml_tensor * llm_build_kqv(
 
     struct ggml_tensor * cur;
 
-    struct ggml_tensor * kq = ggml_mul_mat(ctx, k, q);
-        cb(kq, "kq", il);
-
-    if (model.arch == LLM_ARCH_PHI2 || model.arch == LLM_ARCH_PHI3) {
-        // for this arch, we need to perform the KQ multiplication with F32 precision, otherwise we get NaNs
-        // ref: https://github.com/ggerganov/llama.cpp/pull/4490#issuecomment-1859055847
-        ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
-    }
-
     if (cparams.flash_attn) {
         GGML_UNUSED(model);
         GGML_UNUSED(n_ctx);
@@ -6533,7 +6524,6 @@ static struct ggml_tensor * llm_build_kqv(
                     ggml_row_size(kv.v_l[il]->type, n_embd_head_k),
                     0);
         cb(v, "v", il);
-
         cur = ggml_flash_attn_ext(ctx, q, k, v, kq_mask, kq_scale);
 
         if (model.arch == LLM_ARCH_PHI2 || model.arch == LLM_ARCH_PHI3) {
@@ -6542,6 +6532,9 @@ static struct ggml_tensor * llm_build_kqv(
 
         cur = ggml_reshape_2d(ctx, cur, n_embd_head_k*n_head, n_tokens);
     } else {
+        struct ggml_tensor * kq = ggml_mul_mat(ctx, k, q);
+        cb(kq, "kq", il);
+      
         if (model.arch == LLM_ARCH_PHI2 || model.arch == LLM_ARCH_PHI3) {
             // for this arch, we need to perform the KQ multiplication with F32 precision, otherwise we get NaNs
             // ref: https://github.com/ggerganov/llama.cpp/pull/4490#issuecomment-1859055847
