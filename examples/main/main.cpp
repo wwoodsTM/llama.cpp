@@ -126,6 +126,8 @@ int main(int argc, char ** argv) {
     }
     llama_sampling_params & sparams = params.sparams;
 
+    sparams.dry_multiplier = 0.8f;
+
 #ifndef LOG_DISABLE_LOGS
     log_set_target(log_filename_generator("main", "log"));
     LOG_TEE("Log start\n");
@@ -735,6 +737,7 @@ int main(int argc, char ** argv) {
             for (auto id : embd) {
                 const std::string token_str = llama_token_to_piece(ctx, id);
                 printf("%s", token_str.c_str());
+                //printf("(%d)", id);
 
                 if (embd.size() > 1) {
                     input_tokens.push_back(id);
