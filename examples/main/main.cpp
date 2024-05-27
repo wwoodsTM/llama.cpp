@@ -126,6 +126,8 @@ int main(int argc, char ** argv) {
     }
     llama_sampling_params & sparams = params.sparams;
 
+    sparams.dry_multiplier = 0.8f;
+
 #ifndef LOG_DISABLE_LOGS
     log_set_target(log_filename_generator("main", "log"));
     LOG_TEE("Log start\n");

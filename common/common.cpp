@@ -630,6 +630,30 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
         sparams.penalty_present = std::stof(argv[i]);
         return true;
     }
+    if (arg == "--dry-multiplier") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_multiplier = std::stof(argv[i]);
+        return true;
+    }
+    if (arg == "--dry-base") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_base = std::stoi(argv[i]);
+        return true;
+    }
+    if (arg == "--dry-allowed-length") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_allowed_length = std::stoi(argv[i]);
+        return true;
+    }
     if (arg == "--dynatemp-range") {
         if (++i >= argc) {
             invalid_param = true;
@@ -1417,6 +1441,10 @@ void gpt_params_print_usage(int /*argc*/, char ** argv, const gpt_params & param
     printf("  --repeat-penalty N    penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)\n", (double)sparams.penalty_repeat);
     printf("  --presence-penalty N  repeat alpha presence penalty (default: %.1f, 0.0 = disabled)\n", (double)sparams.penalty_present);
     printf("  --frequency-penalty N repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)\n", (double)sparams.penalty_freq);
+    printf("  --dry-multiplier N    DRY sampler multiplier (default: %.1f, 0.0 = disabled)\n", (double)sparams.dry_multiplier);
+    printf("  --dry-base N          DRY sampler base (default: %.1f)\n", (double)sparams.dry_base);
+    printf("  --dry-allowed-length N\n");
+    printf("                        DRY sampler allowed length (default: %d)\n", sparams.dry_allowed_length);
     printf("  --dynatemp-range N    dynamic temperature range (default: %.1f, 0.0 = disabled)\n", (double)sparams.dynatemp_range);
     printf("  --dynatemp-exp N      dynamic temperature exponent (default: %.1f)\n", (double)sparams.dynatemp_exponent);
     printf("  --mirostat N          use Mirostat sampling.\n");
@@ -1984,7 +2012,7 @@ struct llama_model_params llama_model_params_from_gpt_params(const gpt_params & 
     if (params.n_gpu_layers != -1) {
         mparams.n_gpu_layers = params.n_gpu_layers;
     }
-    mparams.rpc_servers     = params.rpc_servers.c_str();
+    //mparams.rpc_servers     = params.rpc_servers.c_str();
     mparams.main_gpu        = params.main_gpu;
     mparams.split_mode      = params.split_mode;
     mparams.tensor_split    = params.tensor_split;
