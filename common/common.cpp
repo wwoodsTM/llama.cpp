@@ -1608,7 +1608,7 @@ void gpt_params_print_usage(int /*argc*/, char ** argv, const gpt_params & param
         sampler_type_names += llama_sampling_type_to_str(sampler_type) + ";";
     }
     sampler_type_names.pop_back();
-  
+
     struct option_info {
         LLAMA_COMMON_ATTRIBUTE_FORMAT(4, 5)
         option_info(const std::string & tags, const char * args, const char * desc, ...) : tags(tags), args(args), desc(desc) {
@@ -1698,9 +1698,9 @@ void gpt_params_print_usage(int /*argc*/, char ** argv, const gpt_params & param
     options.push_back({ "*",           "       --repeat-penalty N",     "penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)sparams.penalty_repeat });
     options.push_back({ "*",           "       --presence-penalty N",   "repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_present });
     options.push_back({ "*",           "       --frequency-penalty N",  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_freq });
-    options.push_back({ "*",           "       --dry-multiplier N",     "DRY sampler multiplier (default: %.1f, 0.0 = disabled)\n", (double)sparams.dry_multiplier);
-    options.push_back({ "*",           "       --dry-base N",           "DRY sampler base (default: %.1f)\n", (double)sparams.dry_base);
-    options.push_back({ "*",           "       --dry-allowed-length N"  "DRY sampler allowed length (default: %d)\n", sparams.dry_allowed_length);
+    options.push_back({ "*",           "       --dry-multiplier N",     "DRY sampler multiplier (default: %.1f, 0.0 = disabled)", (double)sparams.dry_multiplier });
+    options.push_back({ "*",           "       --dry-base N",           "DRY sampler base (default: %.1f)", (double)sparams.dry_base });
+    options.push_back({ "*",           "       --dry-allowed-length N", "DRY sampler allowed length (default: %d)", sparams.dry_allowed_length });
     options.push_back({ "*",           "       --dynatemp-range N",     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)sparams.dynatemp_range });
     options.push_back({ "*",           "       --dynatemp-exp N",       "dynamic temperature exponent (default: %.1f)", (double)sparams.dynatemp_exponent });
     options.push_back({ "*",           "       --mirostat N",           "use Mirostat sampling.\n"
@@ -1771,8 +1771,8 @@ void gpt_params_print_usage(int /*argc*/, char ** argv, const gpt_params & param
     options.push_back({ "*",           "       --image FILE",           "path to an image file. use with multimodal models. Specify multiple times for batching" });
 
     options.push_back({ "backend" });
-    options.push_back({ "*",           "       --rpc SERVERS",          "comma separated list of RPC servers" })
-      
+    options.push_back({ "*",           "       --rpc SERVERS",          "comma separated list of RPC servers" });
+
     if (llama_supports_mlock()) {
         options.push_back({ "*",           "       --mlock",                "force system to keep model in RAM rather than swapping or compressing" });
     }
