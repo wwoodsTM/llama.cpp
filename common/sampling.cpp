@@ -50,10 +50,10 @@ void llama_sampling_free(struct llama_sampling_context * ctx) {
     delete ctx;
 }
 
-void llama_sampling_reset(llama_sampling_context * ctx) {
+void llama_sampling_reset_grammar(struct llama_sampling_context * ctx) {
     if (ctx->grammar != NULL) {
         llama_grammar_free(ctx->grammar);
-        ctx->grammar = NULL;
+        ctx->grammar = nullptr;
     }
 
     if (!ctx->parsed_grammar.rules.empty()) {
@@ -63,6 +63,10 @@ void llama_sampling_reset(llama_sampling_context * ctx) {
                 grammar_rules.data(),
                 grammar_rules.size(), ctx->parsed_grammar.symbol_ids.at("root"));
     }
+}
+
+void llama_sampling_reset(llama_sampling_context * ctx) {
+    llama_sampling_reset_grammar(ctx);
 
     std::fill(ctx->prev.begin(), ctx->prev.end(), 0);
     ctx->cur.clear();
@@ -113,10 +117,10 @@ std::string llama_sampling_print(const llama_sampling_params & params) {
     snprintf(result, sizeof(result),
             "\trepeat_last_n = %d, repeat_penalty = %.3f, frequency_penalty = %.3f, presence_penalty = %.3f\n"
             "\ttop_k = %d, tfs_z = %.3f, top_p = %.3f, min_p = %.3f, typical_p = %.3f, temp = %.3f\n"
-            "\tmirostat = %d, mirostat_lr = %.3f, mirostat_ent = %.3f",
+            "\tmirostat = %d, mirostat_lr = %.3f, mirostat_ent = %.3f, dry_multiplier = %.3f, dry_base = %.3f, dry_allowed_length = %d",
             params.penalty_last_n, params.penalty_repeat, params.penalty_freq, params.penalty_present,
             params.top_k, params.tfs_z, params.top_p, params.min_p, params.typical_p, params.temp,
-            params.mirostat, params.mirostat_eta, params.mirostat_tau);
+            params.mirostat, params.mirostat_eta, params.mirostat_tau, params.dry_multiplier, params.dry_base, params.dry_allowed_length);
 
     return std::string(result);
 }
@@ -353,12 +357,18 @@ static llama_token_data_array llama_sampling_prepare_impl(
 
     const int n_vocab = llama_n_vocab(llama_get_model(ctx_main));
 
+    // repetition penalties
     const int32_t penalty_last_n  = params.penalty_last_n < 0 ? params.n_prev : params.penalty_last_n;
     const float   penalty_repeat  = params.penalty_repeat;
     const float   penalty_freq    = params.penalty_freq;
     const float   penalty_present = params.penalty_present;
-
     const bool    penalize_nl     = params.penalize_nl;
+
+    // DRY sampler parameters
+    const float     dry_multiplier        = params.dry_multiplier;
+    const float     dry_base              = params.dry_base;
+    const uint32_t  dry_allowed_length    = params.dry_allowed_length;
+    const uint32_t  dry_penalty_last_n    = params.dry_penalty_last_n;
 
     auto & prev = ctx_sampling->prev;
     auto & cur  = ctx_sampling->cur;
@@ -390,23 +400,38 @@ static llama_token_data_array llama_sampling_prepare_impl(
 
     llama_token_data_array cur_p = { cur.data(), cur.size(), false };
 
-    // apply penalties
     const auto& penalty_tokens = params.use_penalty_prompt_tokens ? params.penalty_prompt_tokens : prev;
-    const int penalty_tokens_used_size = std::min((int)penalty_tokens.size(), penalty_last_n);
-    if (penalty_tokens_used_size) {
-        const float nl_logit = logits[llama_token_nl(llama_get_model(ctx_main))];
 
-        llama_sample_repetition_penalties(ctx_main, &cur_p,
-                penalty_tokens.data() + penalty_tokens.size() - penalty_tokens_used_size,
-                penalty_tokens_used_size, penalty_repeat, penalty_freq, penalty_present);
+    // apply repetition penalties
+    {
+        const int penalty_tokens_used_size = std::min((int)penalty_tokens.size(), penalty_last_n);
+        if (penalty_tokens_used_size) {
+            const float nl_logit = logits[llama_token_nl(llama_get_model(ctx_main))];
 
-        if (!penalize_nl) {
-            for (size_t idx = 0; idx < cur_p.size; idx++) {
-                if (cur_p.data[idx].id == llama_token_nl(llama_get_model(ctx_main))) {
-                    cur_p.data[idx].logit = nl_logit;
-                    break;
+            // repetition penalties
+            llama_sample_repetition_penalties(ctx_main, &cur_p,
+                    penalty_tokens.data() + penalty_tokens.size() - penalty_tokens_used_size,
+                    penalty_tokens_used_size, penalty_repeat, penalty_freq, penalty_present);
+
+            if (!penalize_nl) {
+                for (size_t idx = 0; idx < cur_p.size; idx++) {
+                    if (cur_p.data[idx].id == llama_token_nl(llama_get_model(ctx_main))) {
+                        cur_p.data[idx].logit = nl_logit;
+                        break;
+                    }
                 }
             }
+        }
+    }
+
+    // apply DRY penalties
+    {
+        const int penalty_tokens_used_size = std::min(penalty_tokens.size(), (size_t)dry_penalty_last_n);
+        if (penalty_tokens_used_size) {
+            llama_sample_dry(&cur_p,
+                        penalty_tokens.data() + penalty_tokens.size() - penalty_tokens_used_size,
+                        penalty_tokens_used_size, dry_base, dry_multiplier, dry_allowed_length,
+                        params.dry_seq_breakers.data(), params.dry_seq_breakers.size());
         }
     }
 
@@ -448,4 +473,15 @@ void llama_sampling_accept(
     if (ctx_sampling->grammar != NULL && apply_grammar) {
         llama_grammar_accept_token(ctx_main, ctx_sampling->grammar, id);
     }
+}
+
+
+void llama_sampling_rollback(
+        struct llama_sampling_context * ctx_sampling,
+        int rollback_num) {
+    if(rollback_num > ctx_sampling->prev.size()) {
+        rollback_num = ctx_sampling->prev.size();
+    }
+
+    ctx_sampling->prev.erase(ctx_sampling->prev.end() - rollback_num, ctx_sampling->prev.end());
 }

@@ -42,6 +42,7 @@ android-ndk-*
 out/
 tmp/
 
+loras/*
 models/*
 models-mnt
 
