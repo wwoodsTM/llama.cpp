@@ -459,9 +459,6 @@ class Model:
         if chkhsh == "b6dc8df998e1cfbdc4eac8243701a65afe638679230920b50d6f17d81c098166":
             # ref: https://huggingface.co/allenai/OLMo-1.7-7B-hf
             res = "olmo"
-        if chkhsh == "a8594e3edff7c29c003940395316294b2c623e09894deebbc65f33f1515df79e":
-            # ref: https://huggingface.co/databricks/dbrx-base
-            res = "dbrx"
         if chkhsh == "0876d13b50744004aa9aeae05e7b0647eac9d801b5ba4668afc01e709c15e19f":
             # ref: https://huggingface.co/jinaai/jina-embeddings-v2-base-en
             res = "jina-v2-en"
@@ -474,6 +471,9 @@ class Model:
         if chkhsh == "c136ed14d01c2745d4f60a9596ae66800e2b61fa45643e72436041855ad4089d":
             # ref: https://huggingface.co/abacusai/Smaug-Llama-3-70B-Instruct
             res = "smaug-bpe"
+        if chkhsh == "4989f327c25c69fd21dcde0d167b145481a288ce7674405ac1256e7f066c538c":
+            # ref: https://huggingface.co/MLP-KTLim/llama-3-Korean-Bllossom-8B
+            res = "korean-blossom"
 
         if res is None:
             logger.warning("\n")
