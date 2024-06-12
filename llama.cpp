@@ -4659,7 +4659,8 @@ static void llm_load_vocab(
             } else if (
                     tokenizer_pre == "llama3"   ||
                     tokenizer_pre == "llama-v3" ||
-                    tokenizer_pre == "llama-bpe") {
+                    tokenizer_pre == "llama-bpe" ||
+                    tokenizer_pre == "korean-blossom") {
                 vocab.type_pre = LLAMA_VOCAB_PRE_TYPE_LLAMA3;
             } else if (
                     tokenizer_pre == "deepseek-llm") {
