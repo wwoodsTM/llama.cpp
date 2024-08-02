@@ -146,13 +146,13 @@ typedef pthread_t ggml_thread_t;
 #include <dlfcn.h>
 #include <stdio.h>
 
-struct BacktraceState {
-    void** current;
-    void** end;
+struct backtrace_state {
+    void ** current;
+    void ** end;
 };
 
 static _Unwind_Reason_Code unwind_callback(struct _Unwind_Context* context, void* arg) {
-    struct BacktraceState* state = (struct BacktraceState*)arg;
+    struct backtrace_state * state = (struct backtrace_state *)arg;
     uintptr_t pc = _Unwind_GetIP(context);
     if (pc) {
         if (state->current == state->end) {
@@ -168,14 +168,14 @@ static void ggml_print_backtrace_symbols(void) {
     const int max = 100;
     void* buffer[max];
 
-    struct BacktraceState state = {buffer, buffer + max};
+    struct backtrace_state state = {buffer, buffer + max};
     _Unwind_Backtrace(unwind_callback, &state);
 
     int count = state.current - buffer;
 
     for (int idx = 0; idx < count; ++idx) {
-        const void* addr = buffer[idx];
-        const char* symbol = "";
+        const void * addr = buffer[idx];
+        const char * symbol = "";
 
         Dl_info info;
         if (dladdr(addr, &info) && info.dli_sname) {
@@ -185,7 +185,7 @@ static void ggml_print_backtrace_symbols(void) {
         fprintf(stderr, "%d: %p %s\n", idx, addr, symbol);
     }
 }
-#elif defined(__linux__)
+#elif defined(__linux__) && defined(__GLIBC__)
 #include <execinfo.h>
 static void ggml_print_backtrace_symbols(void) {
     void * trace[100];
