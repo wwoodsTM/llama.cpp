@@ -555,6 +555,30 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
         sparams.penalty_present = std::stof(argv[i]);
         return true;
     }
+    if (arg == "--dry-multiplier") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_multiplier = std::stof(argv[i]);
+        return true;
+    }
+    if (arg == "--dry-base") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_base = std::stoi(argv[i]);
+        return true;
+    }
+    if (arg == "--dry-allowed-length") {
+        if (++i >= argc) {
+            invalid_param = true;
+            return true;
+        }
+        sparams.dry_allowed_length = std::stoi(argv[i]);
+        return true;
+    }
     if (arg == "--dynatemp-range") {
         CHECK_ARG
         sparams.dynatemp_range = std::stof(argv[i]);
@@ -1471,6 +1495,9 @@ void gpt_params_print_usage(int /*argc*/, char ** argv, const gpt_params & param
     options.push_back({ "*",           "       --repeat-penalty N",     "penalize repeat sequence of tokens (default: %.1f, 1.0 = disabled)", (double)sparams.penalty_repeat });
     options.push_back({ "*",           "       --presence-penalty N",   "repeat alpha presence penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_present });
     options.push_back({ "*",           "       --frequency-penalty N",  "repeat alpha frequency penalty (default: %.1f, 0.0 = disabled)", (double)sparams.penalty_freq });
+    options.push_back({ "*",           "       --dry-multiplier N",     "DRY sampler multiplier (default: %.1f, 0.0 = disabled)", (double)sparams.dry_multiplier });
+    options.push_back({ "*",           "       --dry-base N",           "DRY sampler base (default: %.1f)", (double)sparams.dry_base });
+    options.push_back({ "*",           "       --dry-allowed-length N", "DRY sampler allowed length (default: %d)", sparams.dry_allowed_length });
     options.push_back({ "*",           "       --dynatemp-range N",     "dynamic temperature range (default: %.1f, 0.0 = disabled)", (double)sparams.dynatemp_range });
     options.push_back({ "*",           "       --dynatemp-exp N",       "dynamic temperature exponent (default: %.1f)", (double)sparams.dynatemp_exponent });
     options.push_back({ "*",           "       --mirostat N",           "use Mirostat sampling.\n"
@@ -2144,7 +2171,7 @@ struct llama_model_params llama_model_params_from_gpt_params(const gpt_params & 
     if (params.n_gpu_layers != -1) {
         mparams.n_gpu_layers = params.n_gpu_layers;
     }
-    mparams.rpc_servers     = params.rpc_servers.c_str();
+    //mparams.rpc_servers     = params.rpc_servers.c_str();
     mparams.main_gpu        = params.main_gpu;
     mparams.split_mode      = params.split_mode;
     mparams.tensor_split    = params.tensor_split;
